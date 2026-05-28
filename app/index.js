@@ -1,5 +1,6 @@
 import sequelize from './shared/database/database.js'
 import { usersRouter } from "./users/router.js"
+import { healthRouter } from "./health/health.js"
 import express from 'express'
 
 const app = express()
@@ -7,6 +8,7 @@ const PORT = process.env.PORT || 8000
 
 app.use(express.json())
 app.use('/api/users', usersRouter)
+app.use(healthRouter)
 
 // create the table if it isn't there yet (no force: we don't want to drop data on every boot)
 sequelize.sync().then(() => console.log('db is ready'))
