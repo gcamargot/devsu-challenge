@@ -1,0 +1,36 @@
+# Local stack to exercise the postgres path (same backend the app uses in k8s).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: devsu
+      POSTGRES_USER: devsu
+      POSTGRES_PASSWORD: devsu
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devsu"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    environment:
+      PORT: 8000
+      DB_DIALECT: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: devsu
+      DB_USER: devsu
+      DB_PASSWORD: devsu
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
