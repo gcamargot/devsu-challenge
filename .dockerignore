@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.github
+k8s
+terraform
+docs
+*.md
+.env
+*.sqlite
+*.sqlite3
+*.db
+coverage
+.vscode
+.idea

@@ -1,0 +1,28 @@
+# node
+node_modules/
+coverage/
+npm-debug.log*
+
+# local db files
+*.sqlite
+*.sqlite3
+*.db
+test.mv.db
+
+# env
+.env
+.env.local
+
+# terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
