@@ -26,3 +26,7 @@ crash.log
 .DS_Store
 .idea/
 .vscode/
+
+# README en progreso: lo reescribe el dueño antes de publicar.
+# Borrar esta línea cuando esté listo para versionarlo.
+/README.md
