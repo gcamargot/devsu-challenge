@@ -1,0 +1,21 @@
+# Default-deny ingress for the app pods, allowing only the ingress controller in.
+# Note: kind's default CNI (kindnet) does not enforce NetworkPolicy; it is enforced
+# on AKS (Azure CNI). Kept here as the intended production posture.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devsu-demo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: devsu-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000

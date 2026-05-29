@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devsu-demo-config
+data:
+  PORT: "8000"
+  NODE_ENV: "production"
+  DB_DIALECT: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "devsu"
+  # DB_HOST depends on the environment (in-cluster pg for kind, managed PG on AKS)
+  DB_HOST: "devsu-postgres"
