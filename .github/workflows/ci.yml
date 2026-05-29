@@ -58,7 +58,7 @@ jobs:
       # runs only when SONAR_TOKEN is configured, so the pipeline stays green on forks
       - name: SonarQube scan
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
