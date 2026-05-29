@@ -10,8 +10,23 @@ app.use(express.json())
 app.use('/api/users', usersRouter)
 app.use(healthRouter)
 
-// create the table if it isn't there yet (no force: we don't want to drop data on every boot)
-sequelize.sync().then(() => console.log('db is ready'))
+// create the table if it isn't there yet (no force: we don't want to drop data on every boot).
+// retry on boot so a db that comes up a bit later doesn't crash the pod; readiness is gated by /ready.
+const initDb = async (retries = 10, delayMs = 3000) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            await sequelize.sync()
+            console.log('db is ready')
+            return
+        } catch (err) {
+            console.error(`db not ready (attempt ${attempt}/${retries}): ${err.message}`)
+            await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+    }
+    console.error('db still unreachable after retries; serving health checks only')
+}
+
+initDb()
 
 const server = app.listen(PORT, () => {
     console.log('Server running on port', PORT)
