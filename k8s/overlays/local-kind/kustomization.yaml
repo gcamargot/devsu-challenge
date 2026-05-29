@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - postgres.yaml
+  - issuer-selfsigned.yaml
+
+# use the locally built image (loaded into kind), not GHCR
+images:
+  - name: ghcr.io/gcamargot/devsu-challenge
+    newName: devsu-demo
+    newTag: local
+
+# demo credentials for the local stack only
+secretGenerator:
+  - name: devsu-demo-secret
+    literals:
+      - DB_USER=devsu
+      - DB_PASSWORD=devsu-local
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  - path: patch-ingress.yaml
+  - path: patch-deployment.yaml

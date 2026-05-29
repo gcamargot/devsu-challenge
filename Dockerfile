@@ -17,6 +17,9 @@ RUN apk add --no-cache tini
 
 COPY --chown=node:node app/ ./
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+# drop build-time leftovers and npm (not needed at runtime: trims size + CVEs from bundled deps)
+RUN rm -f package-lock.json \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # node user (uid 1000) ships with the base image
 USER node

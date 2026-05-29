@@ -1,0 +1,59 @@
+# Throwaway postgres for the local kind demo (ephemeral, single replica).
+# On AKS this is replaced by a managed PostgreSQL Flexible Server.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsu-postgres
+  labels:
+    app.kubernetes.io/name: devsu-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devsu-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devsu-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: devsu
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: devsu-demo-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devsu-demo-secret
+                  key: DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "devsu"]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devsu-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: devsu-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsu-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          # image is loaded into kind with `kind load`, so don't try to pull it
+          imagePullPolicy: IfNotPresent
