@@ -1,0 +1,39 @@
+# Enforce a hardened securityContext: non-root, no privilege escalation,
+# read-only root fs and all capabilities dropped.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restricted-securitycontext
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-securitycontext
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - ingress-nginx
+                - local-path-storage
+      validate:
+        message: "Pods must run non-root with no privilege escalation, read-only rootfs and all caps dropped."
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                      - ALL
