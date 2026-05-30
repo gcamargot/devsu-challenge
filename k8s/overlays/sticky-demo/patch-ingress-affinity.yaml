@@ -1,0 +1,10 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devsu-demo
+  annotations:
+    # pin each client to one upstream pod via a cookie set by ingress-nginx
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "devsu-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
