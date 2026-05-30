@@ -64,3 +64,24 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
+---
+# allow the app to reach postgres (the default-deny-ingress denies everything else).
+# Enforced on AKS (Azure CNI); declarative-only on kind's kindnet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devsu-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: devsu-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: devsu-demo
+      ports:
+        - protocol: TCP
+          port: 5432
