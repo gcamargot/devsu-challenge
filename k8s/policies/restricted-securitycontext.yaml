@@ -24,6 +24,11 @@ spec:
                 - cert-manager
                 - ingress-nginx
                 - local-path-storage
+          - resources:
+              # in-cluster postgres demo DB needs a writable rootfs; excluded here
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: devsu-postgres
       validate:
         message: "Pods must run non-root with no privilege escalation, read-only rootfs and all caps dropped."
         pattern:

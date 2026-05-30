@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devsu-demo
+spec:
+  tls:
+    - hosts:
+        - devsu-prod.gcamargo.dev
+      secretName: devsu-demo-tls
+  rules:
+    - host: devsu-prod.gcamargo.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devsu-demo
+                port:
+                  number: 80

@@ -15,7 +15,7 @@ output "aks_oidc_issuer_url" {
 }
 
 output "postgres_fqdn" {
-  value = azurerm_postgresql_flexible_server.pg.fqdn
+  value = var.enable_managed_pg ? azurerm_postgresql_flexible_server.pg[0].fqdn : ""
 }
 
 output "key_vault_name" {

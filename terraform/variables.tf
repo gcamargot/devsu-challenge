@@ -19,7 +19,13 @@ variable "node_count" {
 variable "node_vm_size" {
   description = "AKS node VM size"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2s_v3"
+}
+
+variable "enable_managed_pg" {
+  description = "Provision Azure PostgreSQL Flexible. Some trial subscriptions restrict it (LocationIsOfferRestricted); then deploy postgres in-cluster instead."
+  type        = bool
+  default     = false
 }
 
 variable "domain_name" {

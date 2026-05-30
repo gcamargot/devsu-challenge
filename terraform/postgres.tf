@@ -5,6 +5,7 @@ resource "random_password" "pg" {
 }
 
 resource "azurerm_postgresql_flexible_server" "pg" {
+  count               = var.enable_managed_pg ? 1 : 0
   name                = "${var.prefix}-pg-${random_string.suffix.result}"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
@@ -24,16 +25,18 @@ resource "azurerm_postgresql_flexible_server" "pg" {
 }
 
 resource "azurerm_postgresql_flexible_server_database" "db" {
+  count     = var.enable_managed_pg ? 1 : 0
   name      = "devsu"
-  server_id = azurerm_postgresql_flexible_server.pg.id
+  server_id = azurerm_postgresql_flexible_server.pg[0].id
   charset   = "UTF8"
   collation = "en_US.utf8"
 }
 
 # allow other Azure services (incl. AKS egress) to reach the server
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure" {
+  count            = var.enable_managed_pg ? 1 : 0
   name             = "allow-azure-services"
-  server_id        = azurerm_postgresql_flexible_server.pg.id
+  server_id        = azurerm_postgresql_flexible_server.pg[0].id
   start_ip_address = "0.0.0.0"
   end_ip_address   = "0.0.0.0"
 }
