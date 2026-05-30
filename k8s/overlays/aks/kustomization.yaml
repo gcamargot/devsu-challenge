@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: devsu
+
+resources:
+  - ../../base
+  - clusterissuer-letsencrypt.yaml
+  - secretproviderclass.yaml
+
+# image is set by the CD job: `kustomize edit set image ...=ACR/devsu-challenge:sha-<git>`
+images:
+  - name: ghcr.io/gcamargot/devsu-challenge
+    newName: __ACR_LOGIN_SERVER__/devsu-challenge
+    newTag: latest
+
+patches:
+  - path: patch-configmap.yaml
+  - path: patch-ingress.yaml
+  - path: patch-deployment.yaml

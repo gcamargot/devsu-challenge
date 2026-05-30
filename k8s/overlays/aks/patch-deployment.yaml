@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsu-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          # mounting the SPC volume is what triggers the CSI driver to sync the
+          # secret; the password is also available as a file under /mnt/secrets-store
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: devsu-kv

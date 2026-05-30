@@ -1,0 +1,42 @@
+# Let's Encrypt via DNS-01 over Azure DNS. cert-manager authenticates with the
+# workload identity created in Terraform (federated to its service account).
+# Placeholders (__UPPER__) are filled by the CD job from `terraform output`.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: __ACME_EMAIL__
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+      - dns01:
+          azureDNS:
+            subscriptionID: __SUBSCRIPTION_ID__
+            resourceGroupName: __RESOURCE_GROUP__
+            hostedZoneName: __DOMAIN__
+            environment: AzurePublicCloud
+            managedIdentity:
+              clientID: __CERTMANAGER_CLIENT_ID__
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: __ACME_EMAIL__
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - dns01:
+          azureDNS:
+            subscriptionID: __SUBSCRIPTION_ID__
+            resourceGroupName: __RESOURCE_GROUP__
+            hostedZoneName: __DOMAIN__
+            environment: AzurePublicCloud
+            managedIdentity:
+              clientID: __CERTMANAGER_CLIENT_ID__
