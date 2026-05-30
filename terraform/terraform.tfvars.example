@@ -1,6 +1,9 @@
 # Copy to terraform.tfvars and adjust. terraform.tfvars is gitignored.
-domain_name = "example.com"
-location    = "eastus"
+# Leave domain_name empty to deploy core infra only (no DNS/Front Door).
+domain_name      = "gcamargo.dev"
+app_subdomain    = "devsu-prod"
+origin_subdomain = "origin"
+location         = "eastus"
 
 # node_count   = 1
 # node_vm_size = "Standard_B2s"

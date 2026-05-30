@@ -29,9 +29,9 @@ variable "domain_name" {
 }
 
 variable "app_subdomain" {
-  description = "Public hostname exposed by Front Door"
+  description = "Public hostname exposed by Front Door (customizable per self-service env)"
   type        = string
-  default     = "app"
+  default     = "devsu-prod"
 }
 
 variable "origin_subdomain" {
