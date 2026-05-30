@@ -17,9 +17,21 @@ resource "azurerm_role_assignment" "aks_ingress_ip" {
 
 # ---- everything below is gated on a domain being configured ----
 
+# No Front Door (trial-forbidden): point a wildcard at the AKS ingress so the public
+# host and every self-service ephemeral subdomain (<sub>.<domain>) resolve to it.
+# cert-manager then issues a wildcard Let's Encrypt cert via DNS-01.
+resource "azurerm_dns_a_record" "wildcard" {
+  count               = local.enable_dns && !local.enable_frontdoor ? 1 : 0
+  name                = "*"
+  zone_name           = azurerm_dns_zone.zone[0].name
+  resource_group_name = azurerm_resource_group.rg.name
+  ttl                 = 300
+  records             = [azurerm_public_ip.ingress.ip_address]
+}
+
 # origin.<domain> -> ingress public IP (cert-manager issues a LE cert for it)
 resource "azurerm_dns_a_record" "origin" {
-  count               = local.enable_dns ? 1 : 0
+  count               = local.enable_frontdoor ? 1 : 0
   name                = var.origin_subdomain
   zone_name           = azurerm_dns_zone.zone[0].name
   resource_group_name = azurerm_resource_group.rg.name
@@ -28,7 +40,7 @@ resource "azurerm_dns_a_record" "origin" {
 }
 
 resource "azurerm_cdn_frontdoor_profile" "fd" {
-  count               = local.enable_dns ? 1 : 0
+  count               = local.enable_frontdoor ? 1 : 0
   name                = "${var.prefix}-fd"
   resource_group_name = azurerm_resource_group.rg.name
   sku_name            = "Standard_AzureFrontDoor"
@@ -36,13 +48,13 @@ resource "azurerm_cdn_frontdoor_profile" "fd" {
 }
 
 resource "azurerm_cdn_frontdoor_endpoint" "fd" {
-  count                    = local.enable_dns ? 1 : 0
+  count                    = local.enable_frontdoor ? 1 : 0
   name                     = "${var.prefix}-ep"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd[0].id
 }
 
 resource "azurerm_cdn_frontdoor_origin_group" "fd" {
-  count                    = local.enable_dns ? 1 : 0
+  count                    = local.enable_frontdoor ? 1 : 0
   name                     = "aks-origin-group"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd[0].id
 
@@ -60,7 +72,7 @@ resource "azurerm_cdn_frontdoor_origin_group" "fd" {
 }
 
 resource "azurerm_cdn_frontdoor_origin" "fd" {
-  count                         = local.enable_dns ? 1 : 0
+  count                         = local.enable_frontdoor ? 1 : 0
   name                          = "aks-ingress"
   cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.fd[0].id
   enabled                       = true
@@ -76,7 +88,7 @@ resource "azurerm_cdn_frontdoor_origin" "fd" {
 }
 
 resource "azurerm_cdn_frontdoor_custom_domain" "app" {
-  count                    = local.enable_dns ? 1 : 0
+  count                    = local.enable_frontdoor ? 1 : 0
   name                     = "app-domain"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd[0].id
   dns_zone_id              = azurerm_dns_zone.zone[0].id
@@ -89,7 +101,7 @@ resource "azurerm_cdn_frontdoor_custom_domain" "app" {
 }
 
 resource "azurerm_cdn_frontdoor_route" "app" {
-  count                         = local.enable_dns ? 1 : 0
+  count                         = local.enable_frontdoor ? 1 : 0
   name                          = "app-route"
   cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.fd[0].id
   cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.fd[0].id
@@ -104,7 +116,7 @@ resource "azurerm_cdn_frontdoor_route" "app" {
 }
 
 resource "azurerm_dns_txt_record" "app_validation" {
-  count               = local.enable_dns ? 1 : 0
+  count               = local.enable_frontdoor ? 1 : 0
   name                = "_dnsauth.${var.app_subdomain}"
   zone_name           = azurerm_dns_zone.zone[0].name
   resource_group_name = azurerm_resource_group.rg.name
@@ -116,7 +128,7 @@ resource "azurerm_dns_txt_record" "app_validation" {
 }
 
 resource "azurerm_dns_cname_record" "app" {
-  count               = local.enable_dns ? 1 : 0
+  count               = local.enable_frontdoor ? 1 : 0
   name                = var.app_subdomain
   zone_name           = azurerm_dns_zone.zone[0].name
   resource_group_name = azurerm_resource_group.rg.name
@@ -126,7 +138,7 @@ resource "azurerm_dns_cname_record" "app" {
 
 # ---- WAF (Standard: custom rules; managed rule sets require Premium) ----
 resource "azurerm_cdn_frontdoor_firewall_policy" "waf" {
-  count               = local.enable_dns ? 1 : 0
+  count               = local.enable_frontdoor ? 1 : 0
   name                = "${var.prefix}waf"
   resource_group_name = azurerm_resource_group.rg.name
   sku_name            = azurerm_cdn_frontdoor_profile.fd[0].sku_name
@@ -153,7 +165,7 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "waf" {
 }
 
 resource "azurerm_cdn_frontdoor_security_policy" "waf" {
-  count                    = local.enable_dns ? 1 : 0
+  count                    = local.enable_frontdoor ? 1 : 0
   name                     = "${var.prefix}-waf-assoc"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd[0].id
 

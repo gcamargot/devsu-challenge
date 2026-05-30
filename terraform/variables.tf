@@ -28,6 +28,12 @@ variable "enable_managed_pg" {
   default     = false
 }
 
+variable "enable_frontdoor" {
+  description = "Provision Azure Front Door + WAF. Trial/Student accounts are forbidden from Front Door; when off, traffic goes straight to the AKS ingress with a Let's Encrypt cert."
+  type        = bool
+  default     = false
+}
+
 variable "domain_name" {
   description = "Domain managed in Azure DNS. Empty = skip DNS/Front Door (deploy core infra only)."
   type        = string

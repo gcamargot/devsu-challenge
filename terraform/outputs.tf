@@ -32,7 +32,7 @@ output "dns_zone_name_servers" {
 }
 
 output "frontdoor_endpoint" {
-  value = local.enable_dns ? azurerm_cdn_frontdoor_endpoint.fd[0].host_name : ""
+  value = local.enable_frontdoor ? azurerm_cdn_frontdoor_endpoint.fd[0].host_name : ""
 }
 
 output "app_url" {
@@ -40,7 +40,7 @@ output "app_url" {
 }
 
 output "origin_host" {
-  value = local.enable_dns ? "${var.origin_subdomain}.${var.domain_name}" : ""
+  value = local.enable_frontdoor ? "${var.origin_subdomain}.${var.domain_name}" : ""
 }
 
 output "certmanager_identity_client_id" {
