@@ -1,0 +1,73 @@
+name: CD (deploy to AKS)
+
+# Manual or on a release tag. Auth to Azure is via OIDC (no stored secret).
+# The vars.* below are set once from `terraform output` after the infra is up.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to sha-<commit>)"
+        required: false
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # the image is already public on GHCR (from CI); copy it into ACR so AKS pulls via AcrPull
+      - name: Import image into ACR
+        run: |
+          az acr import --name "${{ vars.ACR_NAME }}" \
+            --source "ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}" \
+            --image "devsu-challenge:${{ steps.tag.outputs.tag }}" --force
+
+      - name: Get AKS credentials
+        run: az aks get-credentials --resource-group "${{ vars.RESOURCE_GROUP }}" --name "${{ vars.AKS_NAME }}" --admin --overwrite-existing
+
+      - name: Render overlay placeholders
+        working-directory: k8s/overlays/aks
+        run: |
+          sed -i \
+            -e "s|__ACR_LOGIN_SERVER__|${{ vars.ACR_LOGIN_SERVER }}|g" \
+            -e "s|__POSTGRES_FQDN__|${{ vars.POSTGRES_FQDN }}|g" \
+            -e "s|__ORIGIN_HOST__|${{ vars.ORIGIN_HOST }}|g" \
+            -e "s|__DOMAIN__|${{ vars.DOMAIN }}|g" \
+            -e "s|__RESOURCE_GROUP__|${{ vars.RESOURCE_GROUP }}|g" \
+            -e "s|__SUBSCRIPTION_ID__|${{ vars.AZURE_SUBSCRIPTION_ID }}|g" \
+            -e "s|__TENANT_ID__|${{ vars.AZURE_TENANT_ID }}|g" \
+            -e "s|__KV_NAME__|${{ vars.KV_NAME }}|g" \
+            -e "s|__KV_CLIENT_ID__|${{ vars.KV_CLIENT_ID }}|g" \
+            -e "s|__CERTMANAGER_CLIENT_ID__|${{ vars.CERTMANAGER_CLIENT_ID }}|g" \
+            -e "s|__ACME_EMAIL__|${{ vars.ACME_EMAIL }}|g" \
+            *.yaml
+          kustomize edit set image "ghcr.io/gcamargot/devsu-challenge=${{ vars.ACR_LOGIN_SERVER }}/devsu-challenge:${{ steps.tag.outputs.tag }}"
+
+      - name: Apply
+        run: |
+          kubectl apply -k k8s/overlays/aks
+          kubectl -n devsu rollout status deploy/devsu-demo --timeout=180s
