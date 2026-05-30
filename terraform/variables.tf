@@ -23,8 +23,9 @@ variable "node_vm_size" {
 }
 
 variable "domain_name" {
-  description = "Domain managed in Azure DNS (registered via App Service Domains)"
+  description = "Domain managed in Azure DNS. Empty = skip DNS/Front Door (deploy core infra only)."
   type        = string
+  default     = ""
 }
 
 variable "app_subdomain" {

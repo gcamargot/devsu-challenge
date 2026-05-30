@@ -1,5 +1,6 @@
 # ---- cert-manager workload identity (DNS-01 solver against Azure DNS) ----
 resource "azurerm_user_assigned_identity" "certmanager" {
+  count               = local.enable_dns ? 1 : 0
   name                = "${var.prefix}-certmanager"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
@@ -7,16 +8,18 @@ resource "azurerm_user_assigned_identity" "certmanager" {
 }
 
 resource "azurerm_role_assignment" "certmanager_dns" {
-  scope                = azurerm_dns_zone.zone.id
+  count                = local.enable_dns ? 1 : 0
+  scope                = azurerm_dns_zone.zone[0].id
   role_definition_name = "DNS Zone Contributor"
-  principal_id         = azurerm_user_assigned_identity.certmanager.principal_id
+  principal_id         = azurerm_user_assigned_identity.certmanager[0].principal_id
 }
 
 # bind the identity to the cert-manager service account via OIDC
 resource "azurerm_federated_identity_credential" "certmanager" {
+  count               = local.enable_dns ? 1 : 0
   name                = "cert-manager"
   resource_group_name = azurerm_resource_group.rg.name
-  parent_id           = azurerm_user_assigned_identity.certmanager.id
+  parent_id           = azurerm_user_assigned_identity.certmanager[0].id
   audience            = ["api://AzureADTokenExchange"]
   issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
   subject             = "system:serviceaccount:cert-manager:cert-manager"
