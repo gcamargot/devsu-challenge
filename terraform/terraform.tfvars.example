@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is gitignored.
+domain_name = "example.com"
+location    = "eastus"
+
+# node_count   = 1
+# node_vm_size = "Standard_B2s"
+# github_repo  = "gcamargot/devsu-challenge"
