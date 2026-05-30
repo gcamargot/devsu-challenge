@@ -5,10 +5,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - devsu-prod.gcamargo.dev
+        - devsu-prod.gcamargo.xyz
       secretName: devsu-demo-tls
   rules:
-    - host: devsu-prod.gcamargo.dev
+    - host: devsu-prod.gcamargo.xyz
       http:
         paths:
           - path: /

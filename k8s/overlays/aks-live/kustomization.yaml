@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Live AKS demo WITHOUT a delegated domain yet: reuses the kind stack (in-cluster
-# postgres + self-signed issuer) but pulls the image from ACR. Once gcamargo.dev is
+# postgres + self-signed issuer) but pulls the image from ACR. Once gcamargo.xyz is
 # delegated, switch to the `aks` overlay (managed secrets via Key Vault + LE + Front Door).
 namespace: devsu
 
