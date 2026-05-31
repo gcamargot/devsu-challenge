@@ -1,0 +1,77 @@
+site_name: Users API — Documentación de plataforma
+site_description: Documentación de la plataforma Users API (AKS, CI/CD, IaC, edge Cloudflare).
+site_url: https://gcamargot.github.io/devsu-challenge/
+repo_url: https://github.com/gcamargot/devsu-challenge
+repo_name: gcamargot/devsu-challenge
+edit_uri: ""
+docs_dir: docs
+
+theme:
+  name: material
+  language: es
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a modo oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a modo claro
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - toc.follow
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search:
+      lang: es
+
+nav:
+  - Inicio: index.md
+  - Arquitectura cloud: Arquitectura-cloud.md
+  - Pipeline CI/CD: Pipeline-CICD.md
+  - Seguridad y hardening: Seguridad-y-hardening.md
+  - Observabilidad: Observabilidad.md
+  - Costos y FinOps: Costos-y-FinOps.md
+  - Self-service provisioner: Self-service-provisioner.md
+  - Operación: Operacion.md
+  - Estructura del repositorio: Estructura-del-repositorio.md
+  - Posibles mejoras: Posibles-mejoras.md
+  - Procedimientos:
+      - 1. La app y el contenedor: Procedimiento-1-app-y-contenedor.md
+      - 2. Integración (CI): Procedimiento-2-ci.md
+      - 3. Kubernetes local: Procedimiento-3-kubernetes-local.md
+      - 4. Infraestructura en Azure: Procedimiento-4-infra-azure.md
+      - 5. Borde y DNS con Cloudflare: Procedimiento-5-edge-cloudflare.md
+      - 6. Provisioner self-service: Procedimiento-6-provisioner.md
