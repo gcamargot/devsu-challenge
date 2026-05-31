@@ -27,8 +27,8 @@ output "ingress_public_ip" {
 }
 
 output "dns_zone_name_servers" {
-  description = "Set these as the NS records at the registrar"
-  value       = local.enable_dns ? azurerm_dns_zone.zone[0].name_servers : []
+  description = "Azure DNS name servers (only when DNS is managed in Azure; DNS now lives in Cloudflare)"
+  value       = local.enable_azure_dns ? azurerm_dns_zone.zone[0].name_servers : []
 }
 
 output "frontdoor_endpoint" {
@@ -44,7 +44,7 @@ output "origin_host" {
 }
 
 output "certmanager_identity_client_id" {
-  value = local.enable_dns ? azurerm_user_assigned_identity.certmanager[0].client_id : ""
+  value = local.enable_azure_dns ? azurerm_user_assigned_identity.certmanager[0].client_id : ""
 }
 
 output "github_actions_client_id" {

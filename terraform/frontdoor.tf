@@ -21,7 +21,7 @@ resource "azurerm_role_assignment" "aks_ingress_ip" {
 # host and every self-service ephemeral subdomain (<sub>.<domain>) resolve to it.
 # cert-manager then issues a wildcard Let's Encrypt cert via DNS-01.
 resource "azurerm_dns_a_record" "wildcard" {
-  count               = local.enable_dns && !local.enable_frontdoor ? 1 : 0
+  count               = local.enable_azure_dns && !local.enable_frontdoor ? 1 : 0
   name                = "*"
   zone_name           = azurerm_dns_zone.zone[0].name
   resource_group_name = azurerm_resource_group.rg.name

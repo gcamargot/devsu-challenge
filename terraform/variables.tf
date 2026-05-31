@@ -29,9 +29,28 @@ variable "enable_managed_pg" {
 }
 
 variable "enable_frontdoor" {
-  description = "Provision Azure Front Door + WAF. Trial/Student accounts are forbidden from Front Door; when off, traffic goes straight to the AKS ingress with a Let's Encrypt cert."
+  description = "Provision Azure Front Door + WAF. Trial/Student accounts are forbidden from Front Door; when off, traffic goes straight to the AKS ingress."
   type        = bool
   default     = false
+}
+
+variable "enable_azure_dns" {
+  description = "Manage DNS in Azure DNS. Off when DNS is delegated to Cloudflare (the edge provider used instead of Front Door)."
+  type        = bool
+  default     = false
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token (Zone DNS/Settings/SSL edit). Empty = skip Cloudflare."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone id for the domain"
+  type        = string
+  default     = ""
 }
 
 variable "domain_name" {
