@@ -27,7 +27,7 @@ terraform output
 
 Terraform crea la **infra**. Los **add-ons del cluster** (ingress-nginx apuntado a la IP
 estática, cert-manager, metrics-server, Kyverno) se instalan después con Helm
-(ver `../docs/` y el job de CD), porque configurar el provider helm contra un cluster
+(ver `scripts/bootstrap-addons.sh` y el job de CD), porque configurar el provider helm contra un cluster
 que todavía no existe en el mismo apply es frágil. El `ClusterIssuer` (DNS-01) se aplica
 una vez que cert-manager está arriba.
 

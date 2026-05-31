@@ -41,7 +41,4 @@ tf-destroy: ## Tear down all Azure infra
 bootstrap: ## Install AKS add-ons (stage 2)
 	./scripts/bootstrap-addons.sh
 
-report: ## Render the PDF report from docs/report.md
-	npx md-to-pdf docs/report.md
-
-.PHONY: help test lint coverage docker-build compose-up compose-down kind-deploy kind-down tf-plan tf-apply tf-destroy bootstrap report
+.PHONY: help test lint coverage docker-build compose-up compose-down kind-deploy kind-down tf-plan tf-apply tf-destroy bootstrap

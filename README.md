@@ -50,7 +50,6 @@ k8s/
 terraform/            Infraestructura en Azure (AKS, ACR, Key Vault, DNS, Front Door)
 scripts/              bootstrap-addons.sh (instalación de add-ons del clúster)
 .github/workflows/    ci.yml (build/test/scan/push) y cd.yml (deploy a AKS)
-docs/                 Diagramas, informe y evidencia de despliegues
 ```
 
 ## Correr localmente
