@@ -1,0 +1,28 @@
+# Auto-create a default-deny-ingress NetworkPolicy in the app namespace so a
+# good baseline always exists (the app overlay then allows the ingress controller).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-default-networkpolicy
+spec:
+  generateExisting: true
+  rules:
+    - name: default-deny-ingress
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/part-of: devsu-demo
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-ingress
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress

@@ -1,0 +1,52 @@
+# Verify that our own images are signed (keyless cosign) by this repo's CI workflow.
+# Scoped ONLY to the devsu-challenge images so public images (postgres, ingress-nginx,
+# cert-manager, kyverno, the ACA provisioner, etc.) are never matched and never blocked.
+#
+# validationFailureAction is Audit on purpose: the image currently running in the
+# cluster is unsigned, so Enforce would block it. Flip to Enforce once a signed image
+# (built by the updated CI) has rolled out — see the README/runbook for the cutover.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-images
+spec:
+  validationFailureAction: Audit
+  background: false
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-devsu-challenge-signature
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - ingress-nginx
+                - local-path-storage
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/gcamargot/devsu-challenge*"
+            - "devsuacrgl5fdy.azurecr.io/devsu-challenge*"
+          # mutateDigest must stay false while the action is Audit (Kyverno rejects
+          # mutation on audit-only rules); set it to true together with the Enforce flip
+          # so verified images get pinned to their resolved digest.
+          mutateDigest: false
+          verifyDigest: true
+          required: true
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # GitHub Actions OIDC identity that signed the image
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/gcamargot/devsu-challenge/.github/workflows/ci.yml@refs/heads/*"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"

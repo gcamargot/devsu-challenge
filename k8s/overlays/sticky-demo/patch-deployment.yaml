@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsu-demo
+spec:
+  replicas: 3

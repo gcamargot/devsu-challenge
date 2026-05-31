@@ -1,0 +1,37 @@
+# ama-metrics settings for the AKS managed Prometheus add-on.
+#
+# The add-on defaults to minimalingestionprofile=true, which drops kube_pod_status_ready.
+# This keeps the minimal profile (for cost) but adds kube_pod_status_ready back so the
+# "pods ready / total" panel uses the exact metric. Applied to devsu-aks (kube-system).
+#
+# After applying, restart the agents to reload:
+#   kubectl -n kube-system rollout restart deployment ama-metrics ama-metrics-ksm
+# The metric appears in the workspace ~3 min later.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ama-metrics-settings-configmap
+  namespace: kube-system
+data:
+  schema-version: v1
+  config-version: devsu-dashboards-v1
+  default-scrape-settings-enabled: |-
+    kubelet = true
+    coredns = false
+    cadvisor = true
+    kubeproxy = false
+    apiserver = false
+    kubestate = true
+    nodeexporter = true
+    windowsexporter = false
+    windowskubeproxy = false
+    prometheuscollectorhealth = false
+    controlplane-apiserver = false
+    controlplane-cluster-autoscaler = false
+    controlplane-kube-scheduler = false
+    controlplane-kube-controller-manager = false
+    controlplane-etcd = false
+  default-targets-metrics-keep-list: |-
+    minimalingestionprofile = true
+    kubestate = "kube_pod_status_ready|kube_pod_status_ready_time"
+  default-targets-metrics-keep-list.minimal-ingestion-profile: "true"

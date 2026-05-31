@@ -70,6 +70,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless cosign signing via GitHub OIDC
     steps:
       - uses: actions/checkout@v6
 
@@ -111,6 +112,7 @@ jobs:
         run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
 
       - name: Push image
+        id: push
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v6
         with:
@@ -119,3 +121,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+
+      # keyless signing: Fulcio issues a short-lived cert bound to this workflow's
+      # OIDC identity and the signature is logged to the public Rekor transparency log.
+      - name: Install cosign
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image
+        if: ${{ github.event_name != 'pull_request' }}
+        run: cosign sign --yes ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}

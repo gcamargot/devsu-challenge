@@ -1,0 +1,199 @@
+# AKS fallback for the provisioner (use this if ACA is unavailable for the trial sub).
+# Runs the same image in-cluster using a ServiceAccount (no baked kubeconfig). Exposed both
+# via ingress-nginx (provisioner.gcamargo.xyz) AND a dedicated LoadBalancer Service that
+# carries an azure-dns-label-name → provisioner.<region>.cloudapp.azure.com.
+#
+#   kubectl apply -f provisioner/k8s/reaper.yaml          # namespace + reaper + audit PV/PVC first
+#   kubectl -n provisioner-system create secret generic provisioner-auth \
+#       --from-literal=user=devsu-admin --from-literal=password='D3vsu-Ch4ll3ng3!'
+#   kubectl apply -f provisioner/k8s/provisioner-aks.yaml
+#
+# Note: this fallback reuses the shared audit PVC `provisioner-audit` created by reaper.yaml.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provisioner
+  namespace: provisioner-system
+---
+# The web backend creates whole environments, so it needs to manage namespaces and the
+# core/apps/networking resources inside them. Scoped to those groups (not cluster-admin).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: provisioner
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: provisioner
+subjects:
+  - kind: ServiceAccount
+    name: provisioner
+    namespace: provisioner-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provisioner
+  namespace: provisioner-system
+  labels:
+    app.kubernetes.io/name: provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: provisioner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: provisioner
+    spec:
+      serviceAccountName: provisioner
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provisioner
+          image: devsuacrgl5fdy.azurecr.io/provisioner:sha-1780250099
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CLUSTER_ISSUER
+              value: selfsigned
+            - name: ENV_DOMAIN
+              value: gcamargo.xyz
+            - name: MAX_CONCURRENT_ENVS
+              value: "3"
+            - name: AUDIT_LOG_FILE
+              value: /audit/audit.jsonl
+            - name: AUDIT_SOURCE
+              value: provisioner
+            # Basic Auth creds. Provide via a Secret (see provisioner-auth below).
+            - name: PROVISIONER_USER
+              valueFrom:
+                secretKeyRef: { name: provisioner-auth, key: user }
+            - name: PROVISIONER_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: provisioner-auth, key: password }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            # Same shared Azure Files audit log as the reaper (PVC from reaper.yaml).
+            - name: audit
+              mountPath: /audit
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: audit
+          persistentVolumeClaim:
+            claimName: provisioner-audit
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provisioner
+  namespace: provisioner-system
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: provisioner
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Dedicated public LoadBalancer → provisioner.<region>.cloudapp.azure.com
+apiVersion: v1
+kind: Service
+metadata:
+  name: provisioner-lb
+  namespace: provisioner-system
+  annotations:
+    service.beta.kubernetes.io/azure-dns-label-name: provisioner
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: provisioner
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: provisioner
+  namespace: provisioner-system
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [provisioner.gcamargo.xyz]
+      secretName: provisioner-tls
+  rules:
+    - host: provisioner.gcamargo.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: provisioner
+                port:
+                  number: 80
+---
+# allow ingress-nginx and the in-cluster LB health probes into the provisioner pod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: provisioner
+  namespace: provisioner-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: provisioner
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080

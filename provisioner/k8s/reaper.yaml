@@ -1,0 +1,159 @@
+# TTL reaper: a CronJob that deletes provisioner-managed namespaces whose
+# `provisioner.devsu.io/expiresAt` annotation has passed. Runs in-cluster with a
+# ServiceAccount scoped to exactly the verbs it needs, and appends each deletion to
+# the shared Azure Files audit log (same share the ACA app writes to).
+#
+# Prereq: a Secret with the storage account credentials for the Azure Files share
+# (account name + key). Create it once (the share is `provisioner-audit` on the
+# storage account that backs the ACA env storage `auditshare`):
+#
+#   kubectl -n provisioner-system create secret generic provisioner-audit-azurefile \
+#     --from-literal=azurestorageaccountname=devsuprovstorgl5fdy \
+#     --from-literal=azurestorageaccountkey="$(az storage account keys list \
+#         -n devsuprovstorgl5fdy -g devsu-rg --query '[0].value' -o tsv)"
+#
+# Then apply:
+#   kubectl apply -f provisioner/k8s/reaper.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: provisioner-system
+  labels:
+    app.kubernetes.io/managed-by: devsu-provisioner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provisioner-reaper
+  namespace: provisioner-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: provisioner-reaper
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provisioner-reaper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: provisioner-reaper
+subjects:
+  - kind: ServiceAccount
+    name: provisioner-reaper
+    namespace: provisioner-system
+---
+# Static PV bound to the same Azure Files share the ACA app writes its audit log to,
+# mounted via the in-tree Azure Files CSI driver (file.csi.azure.com). The account
+# name + key come from the `provisioner-audit-azurefile` secret (see header).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: provisioner-audit
+  labels:
+    app.kubernetes.io/managed-by: devsu-provisioner
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain # never delete the shared audit data
+  storageClassName: "" # static binding, no dynamic provisioner
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=1000
+    - gid=1000
+    - mfsymlinks
+  csi:
+    driver: file.csi.azure.com
+    # volumeHandle must be globally unique; <resourceGroup>#<account>#<share>.
+    volumeHandle: devsu-rg#devsuprovstorgl5fdy#provisioner-audit
+    volumeAttributes:
+      shareName: provisioner-audit
+    nodeStageSecretRef:
+      name: provisioner-audit-azurefile
+      namespace: provisioner-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: provisioner-audit
+  namespace: provisioner-system
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: ""
+  volumeName: provisioner-audit
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: provisioner-reaper
+  namespace: provisioner-system
+spec:
+  schedule: "*/5 * * * *" # every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: provisioner-reaper
+        spec:
+          serviceAccountName: provisioner-reaper
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reaper
+              # same image as the provisioner: it bundles kubectl + the reaper script.
+              # In-cluster it uses the mounted ServiceAccount token (no KUBECONFIG).
+              image: devsuacrgl5fdy.azurecr.io/provisioner:sha-1780250099
+              command: ["node", "src/reaper.js"]
+              env:
+                - name: AUDIT_LOG_FILE
+                  value: /audit/audit.jsonl
+                - name: AUDIT_SOURCE
+                  value: reaper
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: audit
+                  mountPath: /audit
+          volumes:
+            - name: tmp
+              emptyDir: {}
+            - name: audit
+              persistentVolumeClaim:
+                claimName: provisioner-audit

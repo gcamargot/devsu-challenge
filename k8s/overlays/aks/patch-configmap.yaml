@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devsu-demo-config
+data:
+  # DB_HOST is the managed PostgreSQL FQDN (filled by CD from terraform output);
+  # DB_USER is not secret, the password comes from Key Vault via the CSI driver.
+  DB_HOST: __POSTGRES_FQDN__
+  DB_USER: devsu
