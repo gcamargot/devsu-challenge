@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Devsu Self-Service Provisioner</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+  <style>
+    :root { --bg:#0f1117; --card:#1a1d29; --fg:#e6e6eb; --muted:#8b8f9c; --accent:#5b8cff; --ok:#2ecc71; --err:#ff6b6b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+    p.sub { color: var(--muted); margin-top: 0; }
+    .card { background:var(--card); border:1px solid #262a3a; border-radius:12px; padding:1.5rem; margin-bottom:1.5rem; }
+    label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.04em; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:1rem; }
+    input, select { width:100%; padding:.6rem .7rem; border-radius:8px; border:1px solid #333749; background:#0e1018; color:var(--fg); font-size:.95rem; }
+    .hint { color:var(--muted); font-size:.75rem; margin-top:.3rem; }
+    button { cursor:pointer; border:none; border-radius:8px; font-size:.95rem; }
+    button.primary { background:var(--accent); color:#fff; padding:.7rem 1.4rem; margin-top:1rem; font-weight:600; }
+    button.del { background:#2a2e3e; color:var(--err); padding:.35rem .7rem; font-size:.8rem; }
+    button.ghost { background:transparent; color:var(--muted); border:1px solid #333749; padding:.4rem .8rem; }
+    table { width:100%; border-collapse:collapse; font-size:.9rem; }
+    th, td { text-align:left; padding:.55rem .5rem; border-bottom:1px solid #262a3a; }
+    th { color:var(--muted); font-weight:500; font-size:.75rem; text-transform:uppercase; }
+    code { background:#0e1018; padding:.1rem .35rem; border-radius:5px; font-size:.85em; }
+    a { color:var(--accent); }
+    .ok { background:rgba(46,204,113,.12); border:1px solid rgba(46,204,113,.4); color:var(--ok); padding:.7rem 1rem; border-radius:8px; margin-bottom:1rem; }
+    .err { background:rgba(255,107,107,.12); border:1px solid rgba(255,107,107,.4); color:var(--err); padding:.7rem 1rem; border-radius:8px; margin-bottom:1rem; }
+    .muted { color:var(--muted); }
+    .row-between { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
+    .htmx-indicator { opacity:0; transition:opacity .2s; }
+    .htmx-request .htmx-indicator { opacity:1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Devsu Self-Service Provisioner</h1>
+    <p class="sub">Spin up an ephemeral <strong>Users API</strong> environment. Auto-destroyed after its TTL.</p>
+
+    <div class="card">
+      <form hx-post="/api/environments" hx-target="#result" hx-swap="innerHTML" hx-disabled-elt="button">
+        <div class="grid">
+          <div>
+            <label>Group / Team</label>
+            <input name="group" placeholder="payments" required />
+            <div class="hint">Free text. Used in the namespace name.</div>
+          </div>
+          <div>
+            <label>App</label>
+            <select name="app">
+              <option value="users-api">users-api</option>
+            </select>
+          </div>
+          <div>
+            <label>Release (image tag)</label>
+            <input name="release" value="latest" required />
+            <div class="hint">e.g. <code>sha-9948569</code> or <code>latest</code></div>
+          </div>
+          <div>
+            <label>Subdomain</label>
+            <input name="subdomain" value="devsu-prod" required />
+            <div class="hint">Env at <code>&lt;subdomain&gt;.gcamargo.xyz</code></div>
+          </div>
+          <div>
+            <label>Duration (TTL)</label>
+            <select name="duration">
+              <option>1h</option>
+              <option>4h</option>
+              <option>24h</option>
+              <option>30m</option>
+            </select>
+            <div class="hint">Auto-destroyed after this.</div>
+          </div>
+        </div>
+        <button class="primary" type="submit">Provision <span class="htmx-indicator">…</span></button>
+      </form>
+    </div>
+
+    <div id="result"></div>
+
+    <div class="card">
+      <div class="row-between">
+        <strong>Active environments</strong>
+        <button class="ghost" hx-get="/api/environments" hx-target="#envs" hx-swap="outerHTML">refresh</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Group</th><th>Host</th><th>Release</th><th>Pods</th><th>Expires</th><th></th></tr>
+        </thead>
+        <tbody id="envs" hx-get="/api/environments" hx-trigger="load, every 15s" hx-swap="outerHTML">
+          <tr><td colspan="6" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

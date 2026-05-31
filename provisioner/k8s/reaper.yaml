@@ -1,0 +1,93 @@
+# TTL reaper: a CronJob that deletes provisioner-managed namespaces whose
+# `provisioner.devsu.io/expiresAt` annotation has passed. Runs in-cluster with a
+# ServiceAccount scoped to exactly the verbs it needs. Apply once:
+#   kubectl apply -f provisioner/k8s/reaper.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: provisioner-system
+  labels:
+    app.kubernetes.io/managed-by: devsu-provisioner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provisioner-reaper
+  namespace: provisioner-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: provisioner-reaper
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provisioner-reaper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: provisioner-reaper
+subjects:
+  - kind: ServiceAccount
+    name: provisioner-reaper
+    namespace: provisioner-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: provisioner-reaper
+  namespace: provisioner-system
+spec:
+  schedule: "*/5 * * * *" # every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: provisioner-reaper
+        spec:
+          serviceAccountName: provisioner-reaper
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reaper
+              # same image as the provisioner: it bundles kubectl + the reaper script.
+              # In-cluster it uses the mounted ServiceAccount token (no KUBECONFIG).
+              image: devsuacrgl5fdy.azurecr.io/provisioner:sha-1780239889
+              command: ["node", "src/reaper.js"]
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
