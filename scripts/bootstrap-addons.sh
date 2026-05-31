@@ -24,7 +24,8 @@ helm repo update >/dev/null
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
   --set controller.service.loadBalancerIP="$INGRESS_IP" \
-  --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-resource-group"="$RG"
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-resource-group"="$RG" \
+  --set controller.service.externalTrafficPolicy=Local
 
 # cert-manager using workload identity for the DNS-01 solver
 helm upgrade --install cert-manager jetstack/cert-manager \
