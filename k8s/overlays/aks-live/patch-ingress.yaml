@@ -3,6 +3,15 @@ kind: Ingress
 metadata:
   name: devsu-demo
   annotations:
+    # Edge-to-origin TLS is Cloudflare "Full (strict)": the origin presents a
+    # Cloudflare Origin CA certificate (trusted by CF for origin pulls), NOT a
+    # cert-manager-issued one. So we DELETE the cluster-issuer annotation that the
+    # local-kind base patch sets to `selfsigned` (strategic-merge null = remove key),
+    # otherwise cert-manager would keep (re)issuing/overwriting a self-signed cert.
+    # The origin cert+key live ONLY in the k8s Secret `devsu-origin-tls` (created
+    # out-of-band, never in git). See aks-live/origin-ca-tls.md for the create flow,
+    # verification and rollback.
+    cert-manager.io/cluster-issuer: ~
     # Origin lockdown: only Cloudflare PoPs may reach the app. Anyone hitting the
     # public LB IP directly (bypassing the CF edge) gets a 403 from nginx.
     #
@@ -20,7 +29,8 @@ spec:
   tls:
     - hosts:
         - devsu-prod.gcamargo.xyz
-      secretName: devsu-demo-tls
+      # Cloudflare Origin CA cert/key (out-of-band Secret, NOT cert-manager managed).
+      secretName: devsu-origin-tls
   rules:
     - host: devsu-prod.gcamargo.xyz
       http:
