@@ -5,3 +5,4 @@ resources:
   - require-requests-limits.yaml
   - restricted-securitycontext.yaml
   - default-networkpolicy.yaml
+  - verify-images.yaml
