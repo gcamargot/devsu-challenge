@@ -96,9 +96,26 @@ variable "github_repo" {
 }
 
 variable "tags" {
-  type = map(string)
+  description = "Tags applied to every resource for cost allocation (Azure Cost Management can group/filter spend by these). See terraform/finops.tf."
+  type        = map(string)
   default = {
-    project = "devsu-challenge"
-    owner   = "gcamargot"
+    project     = "devsu-challenge"
+    owner       = "gcamargot"
+    department  = "devops"
+    cost_center = "cc-1001"
+    environment = "production"
+    managed_by  = "terraform"
   }
+}
+
+variable "budget_amount" {
+  description = "Monthly budget for the resource group (USD) used for cost alerts."
+  type        = number
+  default     = 200
+}
+
+variable "budget_contact_emails" {
+  description = "Emails notified on budget thresholds. Empty = skip the budget (no notification target)."
+  type        = list(string)
+  default     = []
 }
