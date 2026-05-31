@@ -36,6 +36,8 @@ resource "azurerm_kubernetes_cluster" "aks" {
     name       = "system"
     node_count = var.node_count
     vm_size    = var.node_vm_size
+    # when a custom VNet is enabled, run the nodes in its dedicated subnet
+    vnet_subnet_id = local.enable_vnet ? azurerm_subnet.aks[0].id : null
   }
 
   identity {

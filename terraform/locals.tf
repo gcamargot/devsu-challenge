@@ -10,4 +10,7 @@ locals {
 
   # Cloudflare manages DNS + edge (proxy/WAF/SSL) when a token + zone id are provided.
   enable_cloudflare = var.cloudflare_api_token != "" && var.cloudflare_zone_id != ""
+
+  # Custom VNet (segmented subnets + NSGs + private PostgreSQL). Production network design.
+  enable_vnet = var.enable_vnet
 }

@@ -17,11 +17,15 @@ resource "azurerm_postgresql_flexible_server" "pg" {
   sku_name   = "B_Standard_B1ms"
   storage_mb = 32768
 
-  # Public access + firewall for the trial. Production would use a private
-  # endpoint / VNet integration instead (documented in the README).
-  public_network_access_enabled = true
+  # With enable_vnet the server is VNet-integrated (private, no public endpoint).
+  # Without it (trial path) it falls back to public access + a firewall rule.
+  public_network_access_enabled = !local.enable_vnet
+  delegated_subnet_id           = local.enable_vnet ? azurerm_subnet.data[0].id : null
+  private_dns_zone_id           = local.enable_vnet ? azurerm_private_dns_zone.pg[0].id : null
 
   tags = var.tags
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.pg]
 }
 
 resource "azurerm_postgresql_flexible_server_database" "db" {
@@ -32,9 +36,10 @@ resource "azurerm_postgresql_flexible_server_database" "db" {
   collation = "en_US.utf8"
 }
 
-# allow other Azure services (incl. AKS egress) to reach the server
+# public-access path only: allow other Azure services (incl. AKS egress) to reach the server.
+# With enable_vnet the server is private and this rule is not created.
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure" {
-  count            = var.enable_managed_pg ? 1 : 0
+  count            = var.enable_managed_pg && !local.enable_vnet ? 1 : 0
   name             = "allow-azure-services"
   server_id        = azurerm_postgresql_flexible_server.pg[0].id
   start_ip_address = "0.0.0.0"

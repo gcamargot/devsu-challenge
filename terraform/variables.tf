@@ -40,6 +40,12 @@ variable "enable_azure_dns" {
   default     = false
 }
 
+variable "enable_vnet" {
+  description = "Run AKS inside a custom VNet with segmented subnets + NSGs (and a private PostgreSQL). Off in the trial demo (enabling it recreates the cluster); the production network design."
+  type        = bool
+  default     = false
+}
+
 variable "cloudflare_api_token" {
   description = "Cloudflare API token (Zone DNS/Settings/SSL edit). Empty = skip Cloudflare."
   type        = string
