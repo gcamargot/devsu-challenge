@@ -1,0 +1,290 @@
+{
+  "uid": "devsu-envs",
+  "title": "Devsu - Ephemeral Environments & App",
+  "tags": ["devsu", "provisioner", "ephemeral", "aks"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Managed_Prometheus_devsu-amw", "value": "devsu-amw" },
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "type": "query",
+        "label": "Namespace",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(kube_pod_info{namespace=~\"env-.*|devsu\"}, namespace)",
+        "regex": "/^(env-.*|devsu)$/",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overview (per namespace)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Managed ephemeral environments (count)",
+      "description": "Number of namespaces labelled provisioner.devsu.io/managed=true currently present.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (namespace) (kube_pod_info{namespace=~\"env-.*\"}))",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total pods (selected namespaces)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(kube_pod_info{namespace=~\"$namespace\"})",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Not-ready pods (selected namespaces)",
+      "description": "Pods not in Running phase, or with a container not ready. Should be 0 for healthy envs.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(kube_pod_info{namespace=~\"$namespace\"}) - count(kube_pod_status_phase{namespace=~\"$namespace\",phase=\"Running\"} == 1) or vector(0)",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Container restarts (15m, selected)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 1 },
+            { "color": "red", "value": 5 }
+          ] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\"}[15m])) or vector(0)",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Pod readiness: ready / total",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "type": "table",
+      "title": "Per-namespace pod readiness (ready / total)",
+      "description": "ready = pods with kube_pod_status_ready=1 (falls back to Running phase if not ingested). total = kube_pod_info per namespace.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": { "byField": "namespace", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "namespace": "Namespace",
+              "Value #ready": "Ready",
+              "Value #total": "Total"
+            },
+            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "ready",
+          "format": "table",
+          "instant": true,
+          "expr": "sum by (namespace) (kube_pod_status_ready{namespace=~\"$namespace\",condition=\"true\"}) or sum by (namespace) (kube_pod_status_phase{namespace=~\"$namespace\",phase=\"Running\"} == 1)"
+        },
+        {
+          "refId": "total",
+          "format": "table",
+          "instant": true,
+          "expr": "count by (namespace) (kube_pod_info{namespace=~\"$namespace\"})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ready pods over time (per namespace)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "stepAfter": true, "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{namespace}}",
+          "expr": "sum by (namespace) (kube_pod_status_ready{namespace=~\"$namespace\",condition=\"true\"}) or sum by (namespace) (kube_pod_status_phase{namespace=~\"$namespace\",phase=\"Running\"} == 1)"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Restarts",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Container restarts rate (per namespace)",
+      "description": "increase(kube_pod_container_status_restarts_total[5m]) summed per namespace.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{namespace}}",
+          "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Top restarting containers (cumulative)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "Restarts", "namespace": "Namespace", "pod": "Pod", "container": "Container" } } }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "expr": "topk(20, sum by (namespace, pod, container) (kube_pod_container_status_restarts_total{namespace=~\"$namespace\"}))"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "CPU & Memory",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU usage (cores) per namespace",
+      "description": "rate(container_cpu_usage_seconds_total[5m]) summed per namespace (cAdvisor).",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{namespace}}",
+          "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container!=\"\",image!=\"\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory working set (bytes) per namespace",
+      "description": "sum(container_memory_working_set_bytes) per namespace (cAdvisor).",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{namespace}}",
+          "expr": "sum by (namespace) (container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",image!=\"\"})"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Per-pod CPU / Memory (selected namespaces)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 32 },
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "pod", "mode": "outer" } },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time 1": true, "Time 2": true, "namespace 2": true },
+            "renameByName": {
+              "namespace 1": "Namespace",
+              "pod": "Pod",
+              "Value #cpu": "CPU (cores)",
+              "Value #mem": "Memory (bytes)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Memory (bytes)" }, "properties": [ { "id": "unit", "value": "bytes" } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "cpu",
+          "format": "table",
+          "instant": true,
+          "expr": "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container!=\"\",image!=\"\"}[5m]))"
+        },
+        {
+          "refId": "mem",
+          "format": "table",
+          "instant": true,
+          "expr": "sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",image!=\"\"})"
+        }
+      ]
+    }
+  ]
+}

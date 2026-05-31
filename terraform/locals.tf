@@ -13,4 +13,7 @@ locals {
 
   # Custom VNet (segmented subnets + NSGs + private PostgreSQL). Production network design.
   enable_vnet = var.enable_vnet
+
+  # Off-cluster monitoring: managed Prometheus + Azure Managed Grafana (see monitoring.tf).
+  enable_monitoring = var.enable_monitoring
 }

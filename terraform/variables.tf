@@ -46,6 +46,12 @@ variable "enable_vnet" {
   default     = false
 }
 
+variable "enable_monitoring" {
+  description = "Provision off-cluster monitoring: Azure Monitor managed Prometheus workspace + AKS metrics add-on + Azure Managed Grafana (see monitoring.tf). Available on the trial. Off by default because in the trial these were provisioned live via az CLI and not via terraform apply."
+  type        = bool
+  default     = false
+}
+
 variable "cloudflare_api_token" {
   description = "Cloudflare API token (Zone DNS/Settings/SSL edit). Empty = skip Cloudflare."
   type        = string
