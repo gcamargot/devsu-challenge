@@ -3,8 +3,12 @@
 # via ingress-nginx (provisioner.gcamargo.xyz) AND a dedicated LoadBalancer Service that
 # carries an azure-dns-label-name → provisioner.<region>.cloudapp.azure.com.
 #
-#   kubectl apply -f provisioner/k8s/reaper.yaml          # namespace + reaper first
+#   kubectl apply -f provisioner/k8s/reaper.yaml          # namespace + reaper + audit PV/PVC first
+#   kubectl -n provisioner-system create secret generic provisioner-auth \
+#       --from-literal=user=devsu-admin --from-literal=password='D3vsu-Ch4ll3ng3!'
 #   kubectl apply -f provisioner/k8s/provisioner-aks.yaml
+#
+# Note: this fallback reuses the shared audit PVC `provisioner-audit` created by reaper.yaml.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -70,7 +74,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: provisioner
-          image: devsuacrgl5fdy.azurecr.io/provisioner:sha-1780239889
+          image: devsuacrgl5fdy.azurecr.io/provisioner:sha-1780250099
           ports:
             - name: http
               containerPort: 8080
@@ -79,6 +83,19 @@ spec:
               value: selfsigned
             - name: ENV_DOMAIN
               value: gcamargo.xyz
+            - name: MAX_CONCURRENT_ENVS
+              value: "3"
+            - name: AUDIT_LOG_FILE
+              value: /audit/audit.jsonl
+            - name: AUDIT_SOURCE
+              value: provisioner
+            # Basic Auth creds. Provide via a Secret (see provisioner-auth below).
+            - name: PROVISIONER_USER
+              valueFrom:
+                secretKeyRef: { name: provisioner-auth, key: user }
+            - name: PROVISIONER_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: provisioner-auth, key: password }
           resources:
             requests:
               cpu: 50m
@@ -100,9 +117,15 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # Same shared Azure Files audit log as the reaper (PVC from reaper.yaml).
+            - name: audit
+              mountPath: /audit
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: audit
+          persistentVolumeClaim:
+            claimName: provisioner-audit
 ---
 apiVersion: v1
 kind: Service

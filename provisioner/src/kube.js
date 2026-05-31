@@ -59,7 +59,17 @@ export async function listEnvs() {
   });
 }
 
-// Pod readiness summary for one env namespace.
+// How many managed environments currently exist. Used to enforce the concurrency
+// cap. We count namespaces that aren't already Terminating so a teardown in flight
+// doesn't keep a slot pinned.
+export async function countManagedEnvs() {
+  const envs = await listEnvs();
+  return envs.filter((e) => e.status !== "Terminating").length;
+}
+
+// Pod readiness summary for one env namespace: total pods, how many are Ready, and
+// a coarse phase ("ready" once every pod is Ready, otherwise "pending"). Read live
+// from the k8s API on each call.
 export async function envStatus(namespace) {
   try {
     const out = await kubectl(["get", "pods", "-n", namespace, "-o", "json"]);
@@ -67,8 +77,9 @@ export async function envStatus(namespace) {
     const ready = pods.filter((p) =>
       (p.status?.conditions || []).some((c) => c.type === "Ready" && c.status === "True")
     ).length;
-    return { pods: pods.length, ready };
+    const phase = pods.length > 0 && ready === pods.length ? "ready" : "pending";
+    return { pods: pods.length, ready, phase };
   } catch {
-    return { pods: 0, ready: 0 };
+    return { pods: 0, ready: 0, phase: "unknown" };
   }
 }

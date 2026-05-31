@@ -32,6 +32,12 @@
     .row-between { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
     .htmx-indicator { opacity:0; transition:opacity .2s; }
     .htmx-request .htmx-indicator { opacity:1; }
+    .pill { display:inline-block; padding:.15rem .55rem; border-radius:999px; font-size:.72rem; font-weight:600; }
+    .pill-ready { background:rgba(46,204,113,.16); color:var(--ok); }
+    .pill-pending { background:rgba(91,140,255,.16); color:var(--accent); }
+    .pill-unknown { background:#2a2e3e; color:var(--muted); }
+    tr.capacity td { border-bottom:none; font-size:.78rem; padding-top:.6rem; }
+    tr.audit-err td { color:var(--err); }
   </style>
 </head>
 <body>
@@ -87,9 +93,25 @@
       </div>
       <table>
         <thead>
-          <tr><th>Group</th><th>Host</th><th>Release</th><th>Pods</th><th>Expires</th><th></th></tr>
+          <tr><th>Group</th><th>Host</th><th>Release</th><th>State</th><th>TTL remaining</th><th></th></tr>
         </thead>
         <tbody id="envs" hx-get="/api/environments" hx-trigger="load, every 15s" hx-swap="outerHTML">
+          <tr><td colspan="6" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <strong>Audit log</strong>
+        <button class="ghost" hx-get="/audit" hx-target="#audit" hx-swap="outerHTML">refresh</button>
+      </div>
+      <p class="sub" style="margin-top:0">Every create/destroy is recorded durably (Azure Files). Also at <code>/audit?format=json</code>.</p>
+      <table>
+        <thead>
+          <tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Release</th><th>Result</th></tr>
+        </thead>
+        <tbody id="audit" hx-get="/audit" hx-trigger="load, every 30s" hx-swap="outerHTML">
           <tr><td colspan="6" class="muted">Loading…</td></tr>
         </tbody>
       </table>

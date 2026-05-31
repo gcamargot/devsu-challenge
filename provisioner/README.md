@@ -6,15 +6,29 @@ TTL after which it is automatically destroyed.
 
 ## Live URL
 
-**https://provisioner.jollybeach-e34f00dd.eastus2.azurecontainerapps.io**
+**https://provisioner.gcamargo.xyz** (behind Cloudflare; masks the ACA origin)
+
+Origin: `https://provisioner.jollybeach-e34f00dd.eastus2.azurecontainerapps.io`
 
 Deployed to **Azure Container Apps** (ACA) — Container App `provisioner` in resource group
 `devsu-rg`, ACA environment `provisioner-env` (eastus2, Consumption profile), pulling the
-image from ACR via the app's system-assigned managed identity (`AcrPull`).
+image from ACR via the app's system-assigned managed identity (`AcrPull`). The public
+`provisioner.gcamargo.xyz` name is an ACA custom domain with an ACA-managed TLS cert,
+fronted by Cloudflare's proxy (zone `gcamargo.xyz`). See `infra/README.md` for the exact
+Azure + Cloudflare steps.
 
-> ACA's native ingress hostname is `*.azurecontainerapps.io`. A `*.cloudapp.azure.com` name
-> can only come from an Azure Public IP with a `dnsNameLabel`, which ACA does not expose —
-> so the working URL is the `azurecontainerapps.io` FQDN above. See "Hostname trade-off".
+## Hardening
+
+- **Basic Auth** — the whole app (UI + API) is gated by HTTP Basic Auth (`src/auth.js`);
+  the `devsu-admin` credential comes from `PROVISIONER_USER` / `PROVISIONER_PASSWORD` ACA
+  secrets. `/health` and `/ready` stay open for probes. Unauthenticated requests get 401.
+- **Concurrency limit** — at most `MAX_CONCURRENT_ENVS=3` managed environments; the 4th
+  create is rejected with **HTTP 409**.
+- **Persistent audit log** — every create/destroy (incl. reaper deletions) is appended as
+  JSONL to a shared **Azure Files** share, mounted into both the ACA app and the AKS reaper
+  CronJob. Visible at `/audit` (UI) and `/audit?format=json`.
+- **Per-instance status** — the active-environments table reads live from the k8s API:
+  pod readiness pill, TTL remaining, and the env URL.
 
 ## How the self-service flow works
 
@@ -89,11 +103,13 @@ provisioner/
 ├── .dockerignore
 ├── public/index.html     # htmx single-page UI
 ├── src/
-│   ├── server.js         # Express routes (form, list, create, delete)
+│   ├── server.js         # Express routes (form, list, create, delete, /audit) + auth gate
+│   ├── auth.js           # HTTP Basic Auth middleware (creds from env/ACA secrets)
+│   ├── audit.js          # JSONL audit log on the shared Azure Files mount
 │   ├── manifests.js      # renders the per-env manifest set
-│   ├── kube.js           # kubectl wrapper (apply / delete ns / list / status)
+│   ├── kube.js           # kubectl wrapper (apply / delete ns / list / status / count)
 │   ├── ttl.js            # duration parsing → expiresAt
-│   ├── reaper.js         # one-shot TTL reaper (run by the CronJob)
+│   ├── reaper.js         # one-shot TTL reaper (run by the CronJob; audits deletions)
 │   └── bootstrap.js      # decodes the base64 kubeconfig secret on ACA
 ├── k8s/
 │   ├── reaper.yaml       # reaper CronJob + RBAC (apply once)
@@ -107,8 +123,10 @@ provisioner/
 ```sh
 cd provisioner
 npm install
-KUBECONFIG=/path/to/admin.kubeconfig CLUSTER_ISSUER=selfsigned npm start
-# open http://localhost:8080
+KUBECONFIG=/path/to/admin.kubeconfig CLUSTER_ISSUER=selfsigned \
+  PROVISIONER_USER=devsu-admin PROVISIONER_PASSWORD='D3vsu-Ch4ll3ng3!' \
+  AUDIT_LOG_FILE=./audit.jsonl MAX_CONCURRENT_ENVS=3 npm start
+# open http://localhost:8080 (Basic Auth: devsu-admin / D3vsu-Ch4ll3ng3!)
 ```
 
 ## Hostname trade-off (cloudapp.azure.com)
