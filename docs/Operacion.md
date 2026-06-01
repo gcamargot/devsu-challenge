@@ -268,5 +268,5 @@ Hay un puñado de cosas que dejamos documentadas como el salto natural a un ento
 > - `az aks show -g devsu-rg -n devsu-aks -o table`
 >
 > ```text
-> (pegar aca la salida / captura)
+> ![estado del cluster y la app](evidencia-07-kubernetes.png)
 > ```

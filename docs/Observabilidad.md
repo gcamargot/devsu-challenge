@@ -14,6 +14,8 @@ La capa tiene tres componentes, y conviene separarlos porque cada uno hace una c
 
 Dicho de otra forma: dentro de AKS solo viven los agentes que recolectan; todo lo que consume CPU, memoria y disco de verdad (el TSDB de Prometheus, el render de Grafana) está del lado administrado de Azure, fuera del node pool al límite de quota.
 
+> <font color="#0969da">**Nota:**</font> al habilitar el addon de managed Prometheus, Azure crea solo (no lo hace nuestra IaC) un conjunto de recursos en el resource group: el par de data collection (un `dataCollectionEndpoint` y un `dataCollectionRule`, ambos `MSProm-<region>-devsu-aks`) que cablea el scrapeo hacia el workspace, y media docena de `prometheusRuleGroups` con las recording rules estandar del mixin de Kubernetes (precomputan series caras para que los dashboards rindan). Vienen partidas por dominio (node / kubernetes / UX) y por sistema operativo, asi que aparecen tambien las variantes `-Win` aunque el cluster sea solo Linux. Son inofensivas; las tres `-Win` se pueden borrar sin consecuencia si molesta el ruido en el resource group.
+
 ## Por qué off-cluster
 
 Ya lo adelantamos, pero vale dejarlo explícito porque es la justificación de la arquitectura entera. El node pool del trial está al límite de su quota (2x `Standard_D2s_v3`, 4 vCPU), así que no hay lugar para un Prometheus server más un Grafana propio sin desalojar a la app o a los add-ons. Empujando el almacenamiento y la visualización afuera, lo que queda adentro son agentes que pesan poco y entran en el headroom que sí tenemos. Como bonus, la observabilidad sobrevive a una caída del clúster, que es cuando más la necesitamos.
@@ -58,6 +60,4 @@ El acceso al dashboard y la lectura del estado en el día a día están en el ru
 > - Captura del dashboard "Devsu - Ephemeral Environments & App" en https://devsu-grafana-hng2d6cze7fhh6ae.eus2.grafana.azure.com, con la variable `$namespace` mostrando los entornos `env-*` y el `devsu`, y los paneles de pods ready/total, restarts, CPU y memoria con datos.
 > - Opcional: el login por Entra SSO y el rol Grafana Admin del operador sobre la instancia.
 >
-> ```text
-> (pegar aca la captura del dashboard)
-> ```
+> ![dashboard "Devsu - Ephemeral Environments & App" en Azure Managed Grafana (pods ready, restarts, CPU y memoria por namespace)](grafana-dashboard.png)

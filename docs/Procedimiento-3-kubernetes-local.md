@@ -86,5 +86,5 @@ Con eso depurado, el salto a AKS dejó de ser un experimento y pasó a ser, en s
 >   - `curl -k -X DELETE https://devsu.local/api/users/<id>`
 >
 > ```text
-> (pegar acá la salida / captura)
+> ![kind: 2 replicas, HPA con metricas, CRUD cross-replica via postgres](evidencia-16-kind-local.png)
 > ```

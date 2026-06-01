@@ -69,6 +69,18 @@ Lo primero fue ponerle una puerta. Agregamos un gate de HTTP Basic Auth que cubr
 
 Un self-service sin límite es una invitación a llenar el clúster. Como los entornos efímeros pasan por las mismas políticas de recursos que producción (no son gratis) y el AKS del trial es chico, pusimos un tope de 3 entornos concurrentes. El backend ([provisioner/src/server.js](https://github.com/gcamargot/devsu-challenge/blob/master/provisioner/src/server.js)) cuenta los namespaces gestionados antes de crear y, si ya hay tres, rechaza el pedido con HTTP 409 y un mensaje que explica que hay que destruir uno o esperar un TTL. La tabla del front muestra una fila `N/3 environments in use` para que el tope sea visible y no una sorpresa al apretar Provision.
 
+### Validación pre-flight de colisiones
+
+El tope de concurrencia no es la única guarda previa a crear. Sumamos una validación pre-flight de colisiones que corre ANTES de tocar ningún recurso del clúster: si alguna de las tres comprobaciones falla, el backend ([provisioner/src/server.js](https://github.com/gcamargot/devsu-challenge/blob/master/provisioner/src/server.js)) devuelve HTTP 409 con el detalle de qué chocó y no crea nada. Es atómico a propósito (no deja namespaces huérfanos): o pasa entero, o no toca el clúster. Lo que valida:
+
+1. **Subdominio reservado.** Hay una lista de subdominios que se rechazan siempre (variable `RESERVED_SUBDOMAINS`, default `devsu-prod,prod,www,api`). El objetivo es que el subdominio por default (`devsu-prod`) no pueda pisar el host de producción. El mensaje es del estilo `subdomain "devsu-prod" is reserved and cannot be provisioned`.
+2. **Namespace ya existente.** Si el namespace destino `env-<group>-<subdomain>` ya existe, responde 409 (`namespace env-... already exists`). El helper `namespaceExists` está en [src/kube.js](https://github.com/gcamargot/devsu-challenge/blob/master/provisioner/src/kube.js).
+3. **Host ya en uso.** Si el host `<subdomain>.gcamargo.xyz` ya está servido por algún Ingress en CUALQUIER namespace del clúster (no solo los gestionados), responde 409 mostrando cuál, por ejemplo `host devsu-prod.gcamargo.xyz already in use by ingress devsu/devsu-demo`. La detección la hace el helper `ingressOwningHost` en [src/kube.js](https://github.com/gcamargot/devsu-challenge/blob/master/provisioner/src/kube.js).
+
+> <font color="#cf222e">**Gotcha:**</font> esta validación nació de un caso real. Alguien pidió el subdominio `devsu-prod` (que es a la vez el default del form y el host de producción). El namespace, el Deployment y el postgres se crearon sin problema, pero el Ingress fue rechazado por el admission webhook de nginx (host y path duplicados con `devsu/devsu-demo`), dejando un entorno a medias: namespace y pods arriba, pero sin ruta de entrada y sin que el reaper supiera que era basura. El pre-flight lo previene fallando temprano y sin crear nada, en vez de descubrir el choque a mitad del apply.
+
+> <font color="#0969da">**Nota:**</font> el front (htmx) ahora muestra los cuerpos de error 4xx en pantalla. Por default htmx descarta el body de las respuestas 4xx, así que estos 409 (y los 400 de validación del form) antes fallaban en silencio: el usuario no veía el motivo. Con el cambio, el detalle del 409 ("is reserved", el namespace que ya existe, o el ingress que se queda con el host) aparece en el banner.
+
 ### Audit log persistente y compartido
 
 Una herramienta que crea y destruye infra tiene que dejar rastro. Sumamos un audit log que registra cada create y cada destroy como una línea JSON (JSONL): quién (el usuario del Basic Auth), qué (group, app, release, subdomain, namespace), la acción y el resultado, con timestamp. La lógica está en [provisioner/src/audit.js](https://github.com/gcamargot/devsu-challenge/blob/master/provisioner/src/audit.js) y se expone en el endpoint `/audit` y en la UI.
@@ -85,7 +97,7 @@ Antes la tabla mostraba poco más que el conteo de pods. La enriquecimos para qu
 
 Por último, sacamos el provisioner de la URL cruda de ACA y lo pusimos detrás del mismo borde que la app: un custom domain en Container Apps (con cert managed) más un CNAME proxied en Cloudflare, publicado en `provisioner.gcamargo.xyz`. Así enmascaramos el origen de ACA y la única superficie expuesta a internet sigue siendo Cloudflare, consistente con el resto de la arquitectura (ver [Arquitectura](Arquitectura-cloud.md)). Sumado al Basic Auth, el panel queda con dos capas por delante: el borde de Cloudflare y la auth de la app.
 
-> <font color="#1a7f37">**Verificado:**</font> con estas capas el provisioner pasó de ser un endpoint abierto en una URL de ACA a una herramienta admin autenticada, con tope de concurrencia, auditada y detrás del borde. Cada pieza responde a un riesgo concreto: acceso (Basic Auth + Cloudflare), agotamiento del clúster (tope de 3), y trazabilidad (audit log compartido).
+> <font color="#1a7f37">**Verificado:**</font> con estas capas el provisioner pasó de ser un endpoint abierto en una URL de ACA a una herramienta admin autenticada, con tope de concurrencia, validación de colisiones, auditada y detrás del borde. Cada pieza responde a un riesgo concreto: acceso (Basic Auth + Cloudflare), agotamiento del clúster (tope de 3), entornos a medias por colisión de host/namespace/reservado (pre-flight atómico), y trazabilidad (audit log compartido). El pre-flight quedó desplegado en Azure Container Apps (revisión nueva) y comprobado: un POST con subdominio `devsu-prod` devuelve 409 "is reserved" y no crea el namespace.
 
 ## Diagrama de secuencia
 
@@ -106,5 +118,5 @@ El how-to de uso (login, completar el form, leer la tabla de estado, el tope de 
 > - `kubectl get cronjob -n provisioner-system` y los logs del último Job del reaper barriendo un entorno vencido.
 >
 > ```text
-> (pegar aca la salida / captura)
+> ![pre-flight: subdominio reservado devuelve 409 y no crea nada](evidencia-14-provisioner-preflight.png)
 > ```

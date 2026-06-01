@@ -70,6 +70,8 @@ Una decision de arquitectura que conviene anotar acá es que la observabilidad n
 > - `kubectl get pods,svc,ingress -n devsu`
 > - `kubectl get networkpolicy -n devsu`
 >
-> ```text
-> (pegar acá la salida / captura)
-> ```
+> ![mapa de recursos de la infra (Azure resource viewer)](azure-arch.png)
+>
+> ![el endpoint responde por HTTPS via Cloudflare (cf-ray presente)](evidencia-09-endpoint-origen.png)
+>
+> ![pods, servicios e ingress en el namespace devsu](evidencia-07-kubernetes.png)

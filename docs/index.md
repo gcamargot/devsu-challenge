@@ -84,5 +84,5 @@ Procedimiento por etapas (el camino que recorrimos):
 > - `kubectl get pods,svc,ingress -n devsu`
 >
 > ```text
-> (pegar aca la salida / captura)
+> ![el servicio responde por HTTPS](evidencia-09-endpoint-origen.png)
 > ```
