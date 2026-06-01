@@ -2,6 +2,8 @@
 
 Demuestra afinidad de sesión: ingress-nginx setea una cookie (`devsu-affinity`)
 que fija a cada cliente a la misma réplica. El Deployment se escala a 3 réplicas.
+Es una de las mejoras propuestas en la wiki:
+[Posibles-mejoras](https://gcamargot.github.io/devsu-challenge/Posibles-mejoras/).
 
 ```bash
 kubectl apply -k k8s/overlays/sticky-demo
