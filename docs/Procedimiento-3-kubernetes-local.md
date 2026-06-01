@@ -76,15 +76,8 @@ Con eso depurado, el salto a AKS dejó de ser un experimento y pasó a ser, en s
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la salida de la verificación en kind (reemplazar por salida real o captura):
->
-> - `kubectl get all -n devsu` (esperar el Deployment en `2/2` y los pods `Running`/`Ready`).
-> - `kubectl get hpa -n devsu` (los targets deben mostrar valores reales, no `<unknown>`).
-> - CRUD por HTTPS sobre el ingress self-signed:
->   - `curl -k -X POST https://devsu.local/api/users -H 'Content-Type: application/json' -d '{"dni":"123","name":"demo"}'`
->   - `curl -k https://devsu.local/api/users`
->   - `curl -k -X DELETE https://devsu.local/api/users/<id>`
->
-> ```text
-> ![kind: 2 replicas, HPA con metricas, CRUD cross-replica via postgres](evidencia-16-kind-local.png)
-> ```
+Esta es la verificación real del stack corriendo en el cluster kind local.
+
+![kind local: 2/2 replicas, postgres, ingress, HPA con metricas y CRUD cross-replica](evidencia-16-kind-local.png)
+
+La captura junta todo: el `kubectl get` muestra el Deployment `devsu-demo` en `2/2`, el postgres in-cluster, el ingress y el HPA reportando métricas reales de CPU y memoria (no `<unknown>`); y por debajo, un CRUD por port-forward donde un POST crea un usuario y un GET lo devuelve. La señal clave es doble: que el HPA tenga números concretos significa que metrics-server está alimentando al autoscaler, y que el GET recupere el usuario que creó el POST prueba que las dos réplicas comparten estado a través del postgres (el dato persiste cruzando réplicas, no vive en la memoria de un pod). Es el mismo stack de producción corriendo en local con 2 réplicas, HPA y estado compartido. Se reproduce con `kubectl get all,hpa -n devsu` y un `kubectl port-forward` contra el Service seguido de los `curl` de POST y GET sobre `/api/users`.

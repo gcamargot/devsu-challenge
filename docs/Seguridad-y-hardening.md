@@ -69,37 +69,44 @@ El Deployment de la app ([k8s/base/deployment.yaml](https://github.com/gcamargot
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para que el dueno verifique la postura (reemplazar por salida real o capturas). El nucleo es demostrar que el origen solo se alcanza via Cloudflare:
->
-> ```bash
-> # 1) Directo a la IP de origen: con la allowlist activa debe ser rechazado (403) o quedar en timeout.
-> #    Forzamos el Host para descartar que falle solo por vhost.
-> curl -skI --resolve devsu-prod.gcamargo.xyz:443:20.98.237.230 https://devsu-prod.gcamargo.xyz/health --max-time 10
-> #    (o, mas simple, pegandole crudo a la IP)
-> curl -skI https://20.98.237.230/health --max-time 10
->
-> # 2) Via el dominio (a traves de Cloudflare): debe responder 200 y traer el header cf-ray.
-> curl -sI https://devsu-prod.gcamargo.xyz/health
->
-> # 3) NetworkPolicies efectivas en el namespace de la app.
-> kubectl get networkpolicy -n devsu
->
-> # 4) externalTrafficPolicy del Service del ingress-controller (debe ser Local para ver la IP real).
-> kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.externalTrafficPolicy}{"\n"}'
->
-> # 5) Kyverno en Enforce y el securityContext aplicado en los pods.
-> kubectl get cpol
-> kubectl -n devsu get deploy devsu-demo -o jsonpath='{.spec.template.spec.securityContext}{"\n"}{.spec.template.spec.containers[0].securityContext}{"\n"}'
-> ```
->
-> Tambien adjuntar una captura de la regla WAF/rate-limit en el panel de Cloudflare (Security -> WAF -> Rate limiting rules), mostrando la ventana de 10s y la expresion por `ip.src` + `cf.colo.id`.
->
-> ```text
-> ![origen alcanzable solo via Cloudflare (directo a la IP da 403)](evidencia-09-endpoint-origen.png)
->
-> ![firma cosign keyless verificada](evidencia-05-cosign.png)
->
-> ![Kyverno verifica la firma en admision (PASS)](evidencia-13-kyverno.png)
->
-> ![credencial del ACR cableada en Kyverno](evidencia-15-kyverno-cred.png)
-> ```
+![El origen solo se alcanza via Cloudflare: por el dominio responde 200, directo a la IP da 403](evidencia-09-endpoint-origen.png)
+
+Por el dominio la respuesta es 200 y trae el header `cf-ray`, que lo agrega Cloudflare y prueba que el request paso por el borde; pegandole directo a la IP de origen `20.98.237.230` la respuesta es 403. Significa que el origen solo se alcanza atravesando Cloudflare, con la allowlist de ingress-nginx activa y filtrando todo lo demas.
+
+![cosign verify de la imagen: claims validados, firma en Rekor y certificado verificado](evidencia-05-cosign.png)
+
+El `cosign verify` sale OK: valida los claims, encuentra la firma en el log de transparencia Rekor y verifica el certificado. Significa que la imagen esta firmada y es verificable de forma keyless, con la firma atada a la identidad del workflow de CI.
+
+![policyreport de verify-images en estado pass ("image verified")](evidencia-13-kyverno.png)
+
+El policyreport de la policy verify-images da `pass` con el mensaje "image verified". Significa que Kyverno verifica la firma de la imagen en el momento de admision y la deja pasar (hoy corriendo en modo Audit).
+
+![secret acr-pull en el namespace kyverno y el flag --imagePullSecrets=acr-pull en el admission controller](evidencia-15-kyverno-cred.png)
+
+Se ve el secret `acr-pull` en el namespace `kyverno` y el flag `--imagePullSecrets=acr-pull` cableado en el admission controller. Significa que Kyverno tiene su propia credencial para leer la imagen y su firma del ACR privado; sin ella la verificacion fallaba con `UNAUTHORIZED`.
+
+Estas senales se reproducen con los siguientes comandos:
+
+```bash
+# 1) Directo a la IP de origen: con la allowlist activa debe ser rechazado (403) o quedar en timeout.
+#    Forzamos el Host para descartar que falle solo por vhost.
+curl -skI --resolve devsu-prod.gcamargo.xyz:443:20.98.237.230 https://devsu-prod.gcamargo.xyz/health --max-time 10
+#    (o, mas simple, pegandole crudo a la IP)
+curl -skI https://20.98.237.230/health --max-time 10
+
+# 2) Via el dominio (a traves de Cloudflare): debe responder 200 y traer el header cf-ray.
+curl -sI https://devsu-prod.gcamargo.xyz/health
+
+# 3) NetworkPolicies efectivas en el namespace de la app.
+kubectl get networkpolicy -n devsu
+
+# 4) externalTrafficPolicy del Service del ingress-controller (debe ser Local para ver la IP real).
+kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.spec.externalTrafficPolicy}{"\n"}'
+
+# 5) Kyverno en Enforce y el securityContext aplicado en los pods.
+kubectl get cpol
+kubectl -n devsu get deploy devsu-demo -o jsonpath='{.spec.template.spec.securityContext}{"\n"}{.spec.template.spec.containers[0].securityContext}{"\n"}'
+
+# 6) Firma verificable de la imagen con cosign keyless.
+cosign verify --certificate-identity-regexp '.*' --certificate-oidc-issuer https://token.actions.githubusercontent.com <imagen>
+```

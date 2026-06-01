@@ -101,15 +101,6 @@ Para una corrida completa, el camino que seguimos es este:
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la corrida real de un entorno efímero creado y destruido (reemplazar por salida o captura):
->
-> - Captura del formulario del provisioner ya completado y del banner de confirmación tras enviar, con la tabla mostrando la pill de readiness, el TTL restante y la fila `N/3`.
-> - `curl -sI https://<subdomain>.gcamargo.xyz/health` (respuesta por HTTPS con header `cf-ray` presente).
-> - Un cuarto Provision devolviendo HTTP 409 con el tope `3/3`.
-> - El create y el destroy correspondientes en `https://provisioner.gcamargo.xyz/audit`.
-> - `kubectl get ns -l provisioner.devsu.io/managed=true` mostrando el namespace `env-<group>-<subdomain>`.
-> - `kubectl get ns env-<group>-<subdomain> -o jsonpath='{.metadata.annotations.provisioner\.devsu\.io/expiresAt}'` con la fecha de expiración.
->
-> ```text
-> ![subdominio reservado / colision da 409 sin crear nada](evidencia-14-provisioner-preflight.png)
-> ```
+![subdominio reservado: el form devuelve 409 con el detalle y no crea ningun entorno](evidencia-14-provisioner-preflight.png)
+
+Pidiendo el subdominio `devsu-prod` el provisioner devuelve `HTTP 409` con el mensaje "subdomain devsu-prod is reserved...", y `kubectl get ns env-qa-devsu-prod` confirma NotFound: no se creó namespace. Desde la óptica del usuario del form esto es lo esperado: si pedís un subdominio reservado, o uno cuyo host o namespace ya existe, el provisioner responde 409 con el motivo concreto y no toca el clúster, así que no quedás con un entorno a medias. Se reproduce desde el propio formulario dejando el subdominio en el default `devsu-prod` y apretando Provision, o con un `curl -X POST` al endpoint `/api/environments`.

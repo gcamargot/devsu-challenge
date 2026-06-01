@@ -110,13 +110,6 @@ El how-to de uso (login, completar el form, leer la tabla de estado, el tope de 
 
 ## Evidencia
 
-> Espacio para pegar evidencia de que el provisioner crea y destruye entornos como se describe (reemplazar por salida real o captura):
->
-> - Capturar el form del provisioner y el banner de "provisionando" tras enviar.
-> - `kubectl get ns -l provisioner.devsu.io/managed=true` (debería listar el namespace `env-<group>-<subdomain>` recién creado).
-> - `kubectl get pods,svc,ingress,networkpolicy -n env-<group>-<subdomain>` (app y postgres Ready, Ingress con el host, NetworkPolicies aplicadas).
-> - `kubectl get cronjob -n provisioner-system` y los logs del último Job del reaper barriendo un entorno vencido.
->
-> ```text
-> ![pre-flight: subdominio reservado devuelve 409 y no crea nada](evidencia-14-provisioner-preflight.png)
-> ```
+![pre-flight: subdominio reservado devuelve 409 y el namespace no llega a crearse](evidencia-14-provisioner-preflight.png)
+
+Un POST al provisioner pidiendo el subdominio `devsu-prod` devuelve `HTTP 409` con el mensaje "subdomain devsu-prod is reserved...", y acto seguido `kubectl get ns env-qa-devsu-prod` responde NotFound. Eso muestra que la validación pre-flight rechaza la colisión ANTES de crear nada (el 409 corta el flujo) y que efectivamente no quedó ningún namespace dando vueltas: el create es atómico, sin recursos huérfanos. Se reproduce con un `curl -X POST` al endpoint `/api/environments` usando `subdomain=devsu-prod` y verificando después con `kubectl get ns env-qa-devsu-prod`.

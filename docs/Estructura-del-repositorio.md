@@ -76,31 +76,27 @@ Lo que queda en la raiz es tooling de proyecto: el [Makefile](https://github.com
 
 ## Evidencia
 
-> Espacio para confirmar que el layout descrito coincide con el repo (reemplazar por salida real o captura):
->
-> - `git -C devsu-challenge ls-files | sed 's#/.*##' | sort -u` (carpetas de primer nivel versionadas).
-> - `tree -L 2 -I 'node_modules|coverage|.git|.terraform' devsu-challenge`
-> - `git -C devsu-challenge branch --show-current` (deberia ser `master`).
->
-> ```text
-> $ git ls-files | sed 's#/.*##' | sort -u
-> app
-> docker-compose.yml
-> Dockerfile
-> .dockerignore
-> docs
-> .editorconfig
-> .github
-> .gitignore
-> k8s
-> Makefile
-> mkdocs.yml
-> observability
-> .pre-commit-config.yaml
-> provisioner
-> README.md
-> requirements-docs.txt
-> scripts
-> sonar-project.properties
-> terraform
-> ```
+Las carpetas y archivos de primer nivel versionados, que coinciden con el layout descrito arriba:
+
+```text
+$ git ls-files | sed 's#/.*##' | sort -u
+app
+docker-compose.yml
+Dockerfile
+.dockerignore
+docs
+.editorconfig
+.github
+.gitignore
+k8s
+Makefile
+mkdocs.yml
+observability
+.pre-commit-config.yaml
+provisioner
+README.md
+requirements-docs.txt
+scripts
+sonar-project.properties
+terraform
+```

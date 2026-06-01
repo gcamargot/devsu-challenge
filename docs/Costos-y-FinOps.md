@@ -55,12 +55,4 @@ Resumiendo la postura de FinOps en este contexto: etiquetar todo desde el día u
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia del control de costos (reemplazar por capturas o salida real):
->
-> - Captura de Azure Cost Management con el gasto agrupado por tag (`department`, `project` o `cost_center`).
-> - El budget `devsu-monthly` sobre el resource group con sus dos umbrales (80% forecast / 100% actual).
-> - `az tag list --resource-id <id-de-un-recurso>` mostrando el mapa de tags aplicado.
->
-> ```text
-> Pendiente (fuera de scope por ahora): la captura de Cost Management agrupado por tag se toma cuando haya costo acumulado en la suscripcion. Las etiquetas ya estan aplicadas (project, owner) y el budget esta definido en finops.tf (gateado en budget_contact_emails).
-> ```
+> <font color="#9a6700">**Pendiente:**</font> la captura de Azure Cost Management con el gasto agrupado por tag queda fuera de scope por ahora; se toma cuando haya costo acumulado en la suscripcion. Lo que ya esta aplicado: las etiquetas de costeo en cada recurso (`project`, `owner`; se ven con `az resource list -g devsu-rg --query "[].tags"`) y el budget definido como IaC en [finops.tf](https://github.com/gcamargot/devsu-challenge/blob/master/terraform/finops.tf), gateado en `budget_contact_emails` (se activa cargando un email de contacto).

@@ -75,17 +75,6 @@ El cierre ya está aplicado: el ingress acepta tráfico solo desde los rangos de
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia del borde (reemplazar por salida real o captura):
->
-> - Zona en Cloudflare en estado `active` (captura del panel de la zona `gcamargo.xyz`, o salida de la API mostrando `"status": "active"`).
-> - Request a través del borde, verificando que pasa por Cloudflare (header `cf-ray` presente en la respuesta):
->   - `curl -sI https://devsu-prod.gcamargo.xyz/`
-> - Allowlist de Cloudflare aplicada: directo a la IP da 403, por el dominio da 200.
->   - `curl -sI --resolve devsu-prod.gcamargo.xyz:443:20.98.237.230 https://devsu-prod.gcamargo.xyz/` (pegándole al origen debería dar `403`).
->   - `curl -sI https://devsu-prod.gcamargo.xyz/` (por el borde debería dar `200` con header `cf-ray`).
-> - Verificación del certificado de edge (que lo emite Cloudflare y cubre el host):
->   - `echo | openssl s_client -connect devsu-prod.gcamargo.xyz:443 -servername devsu-prod.gcamargo.xyz 2>/dev/null | openssl x509 -noout -issuer -subject -dates`
->
-> ```text
-> ![endpoint por Cloudflare + origen directo bloqueado](evidencia-09-endpoint-origen.png)
-> ```
+![endpoint por el dominio respondiendo via Cloudflare y origen directo devuelto 403](evidencia-09-endpoint-origen.png)
+
+Por el dominio la app responde bien: `GET /api/users` devuelve la lista en 200 y `/health` da `HTTP/2 200` con `server: cloudflare` y un header `cf-ray`. Ese `cf-ray` lo agrega Cloudflare, así que su presencia confirma que la request pasó por el borde y no resolvió directo al clúster. En cambio, pegándole directo a la IP de origen con `curl --connect-to ...:20.98.237.230:443 .../health` la respuesta es `HTTP 403`: la allowlist del ingress solo deja entrar los rangos de Cloudflare, así que el origen rechaza cualquier cosa que no venga del borde. Se reproduce con `curl -s https://devsu-prod.gcamargo.xyz/api/users`, `curl -sI https://devsu-prod.gcamargo.xyz/health` y `curl --connect-to devsu-prod.gcamargo.xyz:443:20.98.237.230:443 https://devsu-prod.gcamargo.xyz/health`.

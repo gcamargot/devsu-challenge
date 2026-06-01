@@ -55,9 +55,6 @@ El acceso al dashboard y la lectura del estado en el día a día están en el ru
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la captura del dashboard funcionando (reemplazar por la imagen real):
->
-> - Captura del dashboard "Devsu - Ephemeral Environments & App" en https://devsu-grafana-hng2d6cze7fhh6ae.eus2.grafana.azure.com, con la variable `$namespace` mostrando los entornos `env-*` y el `devsu`, y los paneles de pods ready/total, restarts, CPU y memoria con datos.
-> - Opcional: el login por Entra SSO y el rol Grafana Admin del operador sobre la instancia.
->
-> ![dashboard "Devsu - Ephemeral Environments & App" en Azure Managed Grafana (pods ready, restarts, CPU y memoria por namespace)](grafana-dashboard.png)
+![Dashboard "Devsu - Ephemeral Environments & App" en Azure Managed Grafana, con paneles de pods ready/total, restarts, CPU y memoria por namespace](grafana-dashboard.png)
+
+El dashboard "Devsu - Ephemeral Environments & App" corre en Azure Managed Grafana, con la variable `$namespace` cruzando los entornos efimeros `env-*` contra el `devsu` productivo y mostrando pods ready/total, restarts, CPU y memoria. Significa que la observabilidad off-cluster funciona de punta a punta: el Grafana administrado lee del workspace de Prometheus administrado y muestra datos reales, sin nada pesado corriendo dentro del cluster. Se reproduce entrando por Entra SSO a https://devsu-grafana-hng2d6cze7fhh6ae.eus2.grafana.azure.com con el rol Grafana Admin.
