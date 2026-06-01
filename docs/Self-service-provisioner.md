@@ -22,11 +22,13 @@ El panel pide Basic Auth antes de mostrar nada (UI y API por igual). El usuario 
 2. **Group / Team**: el nombre del equipo (por ejemplo `payments`). Es texto libre y entra al nombre del namespace, así que conviene que sea descriptivo y corto.
 3. **App**: dejarlo en `users-api` (es la única app soportada por ahora).
 4. **Release (image tag)**: el tag de la imagen a desplegar. Puede ser `latest` o un tag por commit del CI, por ejemplo `sha-9948569`. Es el mismo tag que ves en GHCR/ACR, así que podés pedir exactamente la imagen que produjo un build concreto.
-5. **Subdomain**: el subdominio público donde va a quedar el entorno. El default es `devsu-prod`, pero conviene cambiarlo a algo propio (por ejemplo `payments-qa`) para no pisar a otro. Tiene que ser una label DNS válida (minúsculas, números y guiones). El entorno queda en `<subdomain>.gcamargo.xyz`.
+5. **Subdomain**: el subdominio público donde va a quedar el entorno. El default es `devsu-prod`, pero hay que cambiarlo a algo propio (por ejemplo `payments-qa`) para no pisar a otro: `devsu-prod` está reservado (es el host de producción) y el form lo rechaza. Tiene que ser una label DNS válida (minúsculas, números y guiones). El entorno queda en `<subdomain>.gcamargo.xyz`.
 6. **Duration (TTL)**: cuánto vive el entorno antes de que el reaper lo borre. Las opciones del form son `30m`, `1h`, `4h`, `24h`. Elegí el plazo más corto que te alcance.
 7. Click en **Provision**. Aparece un banner de confirmación con el link `https://<subdomain>.gcamargo.xyz` y el momento de expiración, y el entorno se suma a la tabla de activos con su conteo de pods (`x/y ready`).
 
 > <font color="#9a6700">**Atencion:**</font> hay un tope de 3 entornos efímeros concurrentes. Si ya hay tres corriendo, el formulario devuelve HTTP 409 con un mensaje del estilo "concurrency limit reached: 3/3" y no crea nada. Es a propósito (el clúster del trial es chico y los entornos efímeros pasan por las mismas políticas de recursos que producción): hay que destruir uno, o esperar a que venza por TTL, antes de pedir el cuarto. La tabla muestra una fila `N/3 environments in use` para que sepas cuánto margen queda.
+
+> <font color="#cf222e">**Gotcha:**</font> el tope de 3 no es lo único que puede frenar un Provision. Antes de crear nada, el provisioner valida tres colisiones y, si alguna falla, devuelve HTTP 409 con el detalle y no crea nada (ni siquiera el namespace): (1) si el subdominio está reservado, el form responde algo como `subdomain "devsu-prod" is reserved and cannot be provisioned` (la lista por default es `devsu-prod`, `prod`, `www`, `api`); (2) si el namespace `env-<group>-<subdomain>` ya existe, `namespace env-... already exists`; (3) si el host `<subdomain>.gcamargo.xyz` ya lo sirve algún Ingress del clúster, `host ... already in use by ingress devsu/devsu-demo` (mostrando cuál). Por eso elegí un subdominio propio (paso 5): si dejás el default `devsu-prod`, choca con el host de producción y el form lo rechaza de entrada. El detalle del error ahora se ve en el banner (antes el front descartaba el cuerpo de los 4xx y estos 409 fallaban en silencio).
 
 ## La tabla de entornos activos
 
@@ -109,5 +111,5 @@ Para una corrida completa, el camino que seguimos es este:
 > - `kubectl get ns env-<group>-<subdomain> -o jsonpath='{.metadata.annotations.provisioner\.devsu\.io/expiresAt}'` con la fecha de expiración.
 >
 > ```text
-> (pegar aca la salida / captura)
+> ![subdominio reservado / colision da 409 sin crear nada](evidencia-14-provisioner-preflight.png)
 > ```

@@ -63,7 +63,7 @@ Que este gate pase en cero no es suerte, es consecuencia del diseño de la image
 
 ### El push, solo después de pasar
 
-El push final también tiene una guarda: `if: ${{ github.event_name != 'pull_request' }}`. En los pull requests la imagen se construye y se escanea (ahí está el valor de seguridad: validamos el contenedor antes del merge) pero no se publica, porque no queremos que código sin revisar ensucie el registry. Recién en un push a una rama de verdad, y solo después de que el scan pasó, la imagen se sube a GHCR con todos sus tags. Desde GHCR es de donde la etapa de despliegue la toma y la importa a ACR; eso lo contamos en la página de CD.
+El push final también tiene una guarda: `if: ${{ github.event_name != 'pull_request' }}`. En los pull requests la imagen se construye y se escanea (ahí está el valor de seguridad: validamos el contenedor antes del merge) pero no se publica, porque no queremos que código sin revisar ensucie el registry. Recién en un push a una rama de verdad, y solo después de que el scan pasó, la imagen se sube a GHCR con todos sus tags. Y una vez publicada, el mismo job la firma con cosign keyless (Fulcio emite un certificado efímero atado a la identidad OIDC del workflow y la firma queda registrada en el log de transparencia Rekor), sin ninguna clave privada que custodiar; esa firma es la que después verifica Kyverno en el cluster. Desde GHCR es de donde la etapa de despliegue la toma y la importa a ACR; eso lo contamos en la página de CD.
 
 > <font color="#1a7f37">**Tip:**</font> construir con `load: true` (sin push) y escanear la imagen ya cargada en el daemon es lo que nos deja meter el gate de Trivy entre el build y la publicación. Así garantizamos que nunca sale a GHCR algo que no pasó el scanner, y que la imagen escaneada es bit a bit la que después deploya el CD.
 
@@ -111,5 +111,5 @@ flowchart TB
 > - Salida del paso de Trivy en el run de Actions: `trivy image --severity HIGH,CRITICAL --ignore-unfixed` con 0 vulnerabilidades, confirmando que el gate pasa.
 >
 > ```text
-> (pegar acá la salida / captura)
+> ![CI: build, test, coverage, SonarQube, build+scan+push](evidencia-04-ci.png)
 > ```

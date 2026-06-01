@@ -84,5 +84,9 @@ flowchart LR
 > - `trivy image users-api:local --severity HIGH,CRITICAL --ignore-unfixed` (debería listar 0 vulnerabilidades).
 >
 > ```text
-> (pegar acá la salida / captura)
+> ![docker build multi-stage](evidencia-01-docker-build.png)
+>
+> ![runtime no-root + healthcheck + /health](evidencia-02-docker-runtime.png)
+>
+> ![Trivy 0 HIGH/CRITICAL fixables](evidencia-03-trivy.png)
 > ```

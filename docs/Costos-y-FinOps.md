@@ -62,5 +62,5 @@ Resumiendo la postura de FinOps en este contexto: etiquetar todo desde el día u
 > - `az tag list --resource-id <id-de-un-recurso>` mostrando el mapa de tags aplicado.
 >
 > ```text
-> (pegar aca la salida / captura)
+> Pendiente (fuera de scope por ahora): la captura de Cost Management agrupado por tag se toma cuando haya costo acumulado en la suscripcion. Las etiquetas ya estan aplicadas (project, owner) y el budget esta definido en finops.tf (gateado en budget_contact_emails).
 > ```

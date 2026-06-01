@@ -66,9 +66,9 @@ La capa de observabilidad tiene su propia carpeta, [observability/](https://gith
 
 ## Documentacion: ahora en la wiki
 
-Antes habia una carpeta `docs/` en el repo con el informe tecnico y la evidencia capturada de cada despliegue. La eliminamos: esta wiki es la unica fuente de verdad operativa y de diseño, y mantener documentacion en dos lados solo lleva a que se desincronicen. La evidencia de cada deploy (local en kind, live en AKS, policies de Kyverno) se referencia ahora desde las paginas correspondientes, en las secciones de Evidencia.
+Antes habia una carpeta `docs/` en el repo con el informe tecnico y la evidencia capturada de cada despliegue, y la sacamos: esta wiki es la unica fuente de verdad operativa y de diseño, y mantener documentacion en dos lados solo lleva a que se desincronicen. La evidencia de cada deploy (local en kind, live en AKS, policies de Kyverno) se referencia ahora desde las paginas correspondientes, en las secciones de Evidencia. Hoy `docs/` volvio al repo pero con otro proposito: es la fuente de un sitio estatico generado con MkDocs (junto con `mkdocs.yml` y `requirements-docs.txt`) que publica esta misma wiki. No es una segunda fuente de verdad sino un espejo de esta, generado a partir de los mismos contenidos.
 
-> <font color="#0969da">**Nota:**</font> si venis de una version vieja del repo y buscas `docs/report.md` o `docs/evidence/`, ya no estan. Lo que necesites esta en esta wiki.
+> <font color="#0969da">**Nota:**</font> si venis de una version vieja del repo y buscas `docs/report.md` o `docs/evidence/`, ya no estan; lo que hay en `docs/` ahora son los `.md` generados de esta wiki para el sitio MkDocs. Lo que necesites esta aca.
 
 ## La raiz
 
@@ -83,5 +83,24 @@ Lo que queda en la raiz es tooling de proyecto: el [Makefile](https://github.com
 > - `git -C devsu-challenge branch --show-current` (deberia ser `master`).
 >
 > ```text
-> (pegar aca la salida / captura)
+> $ git ls-files | sed 's#/.*##' | sort -u
+> app
+> docker-compose.yml
+> Dockerfile
+> .dockerignore
+> docs
+> .editorconfig
+> .github
+> .gitignore
+> k8s
+> Makefile
+> mkdocs.yml
+> observability
+> .pre-commit-config.yaml
+> provisioner
+> README.md
+> requirements-docs.txt
+> scripts
+> sonar-project.properties
+> terraform
 > ```

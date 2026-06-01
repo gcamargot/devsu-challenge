@@ -87,5 +87,5 @@ El cierre ya está aplicado: el ingress acepta tráfico solo desde los rangos de
 >   - `echo | openssl s_client -connect devsu-prod.gcamargo.xyz:443 -servername devsu-prod.gcamargo.xyz 2>/dev/null | openssl x509 -noout -issuer -subject -dates`
 >
 > ```text
-> (pegar acá la salida / captura)
+> ![endpoint por Cloudflare + origen directo bloqueado](evidencia-09-endpoint-origen.png)
 > ```

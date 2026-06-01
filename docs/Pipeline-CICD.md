@@ -78,19 +78,22 @@ Dispara a mano con `workflow_dispatch` (con un input opcional `image_tag`, que p
 
 1. Checkout.
 2. Resolve del image tag: si vino `inputs.image_tag` se usa ese; si no, se arma `sha-$(git sha | cut -c1-7)`. El default cubre el caso común (deployar el commit actual) sin tener que copiar y pegar el sha a mano.
-3. Azure login por OIDC (`azure/login@v2`), con `client-id`, `tenant-id` y `subscription-id` tomados de `vars.AZURE_CLIENT_ID`, `vars.AZURE_TENANT_ID` y `vars.AZURE_SUBSCRIPTION_ID`. GitHub presenta un token OIDC, Azure lo valida contra la federated credential configurada en la identidad, y devuelve un token de acceso con expiracion corta. No hay client secret almacenado en ningún lado, que es justo lo que queríamos evitar.
-4. Import de la imagen a ACR: `az acr import` copia la imagen que CI ya dejó en GHCR (`ghcr.io/<repo>:<tag>`) hacia el ACR como `devsu-challenge:<tag>`, con `--force`. Después AKS la baja vía el rol AcrPull, sin secrets de registry en el cluster.
-5. Get de credenciales de AKS: `az aks get-credentials --admin --overwrite-existing` contra `vars.RESOURCE_GROUP` y `vars.AKS_NAME`.
-6. Render de los placeholders del overlay: en [k8s/overlays/aks](https://github.com/gcamargot/devsu-challenge/tree/master/k8s/overlays/aks) un `sed` reemplaza los placeholders `__UPPER__` (login server del ACR, FQDN de postgres, host del origin, dominio, RG, subscription y tenant id, nombre y client id de Key Vault, client id de cert-manager, email de ACME) por los valores de `vars.*`. Después `kustomize edit set image` fija la imagen al `<ACR>/devsu-challenge:<tag>` resuelto. La razón de usar placeholders es no commitear ids de suscripción ni FQDN en el repo, y poder reconstruirlos desde `terraform output`.
-7. Apply: `kubectl apply -k k8s/overlays/aks` seguido de `kubectl -n devsu rollout status deploy/devsu-demo --timeout=180s`. El `rollout status` con timeout es el que convierte el deploy en algo que puede fallar: si los pods nuevos no quedan listos en 180s, el job se marca rojo en vez de dar por exitoso un deploy que en realidad no levantó.
+3. Setup de kubectl: `azure/setup-kubectl@v4` deja el binario `kubectl` disponible en el runner (el `az aks get-credentials` trae el kubeconfig, pero no instala el cliente).
+4. Azure login por OIDC (`azure/login@v2`), con `client-id`, `tenant-id` y `subscription-id` tomados de `vars.AZURE_CLIENT_ID`, `vars.AZURE_TENANT_ID` y `vars.AZURE_SUBSCRIPTION_ID`. GitHub presenta un token OIDC, Azure lo valida contra la federated credential configurada en la identidad, y devuelve un token de acceso con expiracion corta. No hay client secret almacenado en ningún lado, que es justo lo que queríamos evitar.
+5. Import de la imagen a ACR: `az acr import` copia la imagen que CI ya dejó en GHCR (`ghcr.io/<repo>:<tag>`) hacia el ACR como `devsu-challenge:<tag>`, con `--force`. Después AKS la baja vía el rol AcrPull, sin secrets de registry en el cluster.
+6. Copia de la firma a ACR: `cosign copy` trae la firma y las attestations de la imagen desde GHCR hacia ACR. `az acr import` copia solo el manifest de la imagen, no los artefactos de firma que cuelgan de ella, así que sin este paso Kyverno no podría verificar la firma en el cluster. Con la firma ya en ACR, la verificación corre contra el mismo registry del que AKS baja la imagen.
+7. Get de credenciales de AKS: `az aks get-credentials --admin --overwrite-existing` contra `vars.RESOURCE_GROUP` y `vars.AKS_NAME`.
+8. Render del overlay: en [k8s/overlays/aks-live](https://github.com/gcamargot/devsu-challenge/tree/master/k8s/overlays/aks-live) un `sed` sobre `kustomization.yaml` reemplaza el único placeholder `__ACR_LOGIN_SERVER__` y fija el tag por sha. aks-live es la topología real del trial y no arrastra placeholders de infra productiva (postgres es in-cluster y el TLS sale de un secret precargado, no de Key Vault ni ACME), así que el render quedó reducido a ese reemplazo. La variante con placeholders `__UPPER__` completos (login server del ACR, FQDN de postgres, host del origin, dominio, RG, subscription y tenant id, Key Vault, cert-manager, email de ACME) es la del overlay `aks`, que es el camino productivo y hoy no se aplica.
+9. Apply: `kubectl apply -k k8s/overlays/aks-live` seguido de `kubectl -n devsu rollout status deploy/devsu-demo --timeout=180s`. El `rollout status` con timeout es el que convierte el deploy en algo que puede fallar: si los pods nuevos no quedan listos en 180s, el job se marca rojo en vez de dar por exitoso un deploy que en realidad no levantó.
 
 ### Manejo de secretos y configuración en CD
 
 - Autenticación: OIDC (federated identity), sin client secret en el repositorio. El detalle de cómo se configura la federated credential está en [Procedimiento 4 infra azure](Procedimiento-4-infra-azure.md).
 
-> <font color="#1a7f37">**Tip:**</font> el login a Azure es por OIDC contra una federated credential atada al repo y a la rama exacta, asi que no hay ningun client secret de larga vida guardado en GitHub. No hay credencial robable que, si se filtra, de acceso permanente a la nube: el token que presenta GitHub Actions es efimero y se valida en cada run.
+> <font color="#1a7f37">**Tip:**</font> el login a Azure es por OIDC, asi que no hay ningun client secret de larga vida guardado en GitHub. No hay credencial robable que, si se filtra, de acceso permanente a la nube: el token que presenta GitHub Actions es efimero y se valida en cada run. Un detalle importante del subject: como el job declara `environment: production`, el token OIDC viene con subject `repo:gcamargot/devsu-challenge:environment:production` (el environment, no la rama). La app registration tiene dos federated credentials, una atada a la rama (`repo:...:ref:refs/heads/master`) y otra al environment (`repo:...:environment:production`); para este job la que matchea es la de environment. El detalle de ambas credenciales esta en [Procedimiento 4 infra azure](Procedimiento-4-infra-azure.md).
 - Variables (`vars.*`): valores no sensibles del entorno (nombres de recursos, FQDN, ids) que se cargan una sola vez desde `terraform output` como Variables del environment `production`. Las tratamos como configuración, no como secretos, porque no abren nada por sí solas.
-- Password de la base: no viaja por el pipeline. El overlay `aks` referencia un `SecretProviderClass` que el Secrets Store CSI driver de AKS usa para leer `db-password` directamente de Key Vault en runtime y materializarlo como Secret de Kubernetes. El pipeline nunca ve la contraseña.
+- Password de la base: no viaja por el pipeline. En el overlay que se aplica hoy (`aks-live`, postgres in-cluster) el `db-password` vive en un Secret del namespace que se carga aparte, fuera del flujo del CD. En la variante productiva (`aks`) ese mismo secret lo provee un `SecretProviderClass` que el Secrets Store CSI driver de AKS usa para leer `db-password` directamente de Key Vault en runtime. En los dos casos el pipeline nunca ve la contraseña.
+- Certificado de ingress: en `aks-live` el TLS lo da un secret `devsu-origin-tls` con un certificado Cloudflare Origin CA, precargado en el cluster (no lo emite el pipeline). La variante `aks` usa Let's Encrypt vía cert-manager, para cuando el dominio corra en Azure DNS en vez de Cloudflare.
 
 ## Relación entre CI y CD
 
@@ -109,7 +112,7 @@ El camino a DEV no pasa por GitHub Actions. kind corre en la máquina local, as�
 
 ## Diagrama: flujo a PROD (AKS)
 
-El camino a PROD sí es el pipeline completo. Un push a `master` (o un PR) dispara CI, que construye, valida, escanea y publica la imagen en GHCR. Después, a mano (`workflow_dispatch`) o con un tag de release, CD toma esa imagen, la importa a ACR vía OIDC y aplica el overlay de AKS. El borde (Cloudflare) queda delante del ingress, como se ve en [Arquitectura cloud](Arquitectura-cloud.md).
+El camino a PROD sí es el pipeline completo. Un push a `master` (o un PR) dispara CI, que construye, valida, escanea y publica la imagen en GHCR. Después, a mano (`workflow_dispatch`) o con un tag de release, CD toma esa imagen, la importa a ACR vía OIDC, copia la firma con `cosign copy` y aplica el overlay `aks-live`. El borde (Cloudflare) queda delante del ingress, como se ve en [Arquitectura cloud](Arquitectura-cloud.md).
 
 
 ![Flujo de despliegue a prod (AKS)](Diag5ProdFlow.png)
@@ -125,5 +128,9 @@ El camino de runtime (como llega el usuario: Cloudflare al frente del ingress) n
 > - Imagen publicada en GHCR con el tag `sha-<commit>` y, opcionalmente, la salida de `trivy image --severity HIGH,CRITICAL --ignore-unfixed <tag>` mostrando 0 hallazgos fixables.
 >
 > ```text
-> (pegar acá los links a los runs / la salida / la captura)
+> ![CI verde](evidencia-04-ci.png)
+>
+> ![CD deploy a AKS verde](evidencia-06-cd.png)
+>
+> ![firma cosign verificada](evidencia-05-cosign.png)
 > ```

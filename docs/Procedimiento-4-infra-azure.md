@@ -58,17 +58,22 @@ El postgres in-cluster es la excepción declarada: necesita un rootfs escribible
 
 ## El CD a AKS por OIDC
 
-El despliegue lo hace el workflow [.github/workflows/cd.yml](https://github.com/gcamargot/devsu-challenge/blob/master/.github/workflows/cd.yml), y la decisión de fondo es que no hay ningún secreto de Azure guardado en GitHub. La autenticación es por OIDC: Terraform crea en [identity.tf](https://github.com/gcamargot/devsu-challenge/blob/master/terraform/identity.tf) una app registration (`azuread_application`) con un federated credential atado al subject `repo:gcamargot/devsu-challenge:ref:refs/heads/master`, y le asigna dos roles, `AcrPush` sobre el ACR y `Azure Kubernetes Service Cluster Admin Role` sobre el cluster. Cuando el job corre, GitHub emite un token OIDC, Azure lo valida contra ese federated credential y devuelve credenciales temporales. No hay password que rotar ni secret que se pueda filtrar.
+El despliegue lo hace el workflow [.github/workflows/cd.yml](https://github.com/gcamargot/devsu-challenge/blob/master/.github/workflows/cd.yml), y la decisión de fondo es que no hay ningún secreto de Azure guardado en GitHub. La autenticación es por OIDC: Terraform crea en [identity.tf](https://github.com/gcamargot/devsu-challenge/blob/master/terraform/identity.tf) una app registration (`azuread_application`) con dos federated credentials, `github-master` atada al subject `repo:gcamargot/devsu-challenge:ref:refs/heads/master` y `github-env-production` atada al subject `repo:gcamargot/devsu-challenge:environment:production`. Como el job de CD declara `environment: production`, el token OIDC que emite GitHub viene con subject de environment, así que la credencial que matchea para este deploy es `github-env-production` (la de rama queda disponible por si un job sin environment necesitara federar contra `master`). A esa identidad Terraform le asigna los roles que habilitan el CD: `Contributor` y `AcrPush` sobre el ACR (el primero para operar el registry, el segundo para que `az acr import` y el `cosign copy`/push de la firma puedan escribir), y `Azure Kubernetes Service Cluster Admin Role` sobre el cluster (para el `az aks get-credentials --admin`). Cuando el job corre, GitHub emite un token OIDC, Azure lo valida contra la federated credential y devuelve credenciales temporales. No hay password que rotar ni secret que se pueda filtrar.
 
-> <font color="#1a7f37">**Verificado:**</font> el CD se autentica a Azure por OIDC con un federated credential atado al subject `repo:gcamargot/devsu-challenge:ref:refs/heads/master`. No hay ningún secret de Azure en GitHub: las credenciales son temporales y se emiten por corrida, así que no hay password que rotar ni que se pueda filtrar.
+> <font color="#1a7f37">**Verificado:**</font> el CD se autentica a Azure por OIDC, sin ningún secret de Azure en GitHub: las credenciales son temporales y se emiten por corrida, así que no hay password que rotar ni que se pueda filtrar. El subject del token es `repo:gcamargot/devsu-challenge:environment:production` (no la rama) porque el job declara `environment: production`; la app registration tiene las dos federated credentials, `github-master` (subject de rama) y `github-env-production` (subject de environment), y la que aplica acá es la de environment.
 
-Con la sesión ya autenticada, el CD hace tres cosas en orden:
+Con la sesión ya autenticada, y con `kubectl` instalado en el runner por `azure/setup-kubectl@v4`, el CD hace lo siguiente en orden:
 
 1. **`az acr import`**: la imagen ya está pública en GHCR (la dejó ahí el CI). En vez de reconstruirla, el CD la copia tal cual a ACR con `az acr import --force`. Esto es deliberado: la imagen que se deploya es bit a bit la misma que el CI escaneó con Trivy, no una recompilada. Y al quedar en ACR, AKS la baja por el rol AcrPull sin necesitar credenciales de GHCR adentro del cluster.
-2. **`az aks get-credentials --admin`**: trae el kubeconfig del cluster usando la identidad federada.
-3. **`kubectl apply -k k8s/overlays/aks`**: aplica el overlay de Kustomize ([k8s/overlays/aks](https://github.com/gcamargot/devsu-challenge/tree/master/k8s/overlays/aks)). Antes de aplicar, el job sustituye los placeholders del overlay con los valores de los outputs de Terraform (login server del ACR, FQDN de postgres, hostnames, datos de Key Vault) y fija la imagen con `kustomize edit set image` apuntando a `ACR/devsu-challenge:sha-<commit>`. Cierra esperando el rollout con `kubectl rollout status`, así un deploy que no estabiliza se marca como fallido en vez de quedar verde por error.
+2. **`cosign copy`**: trae la firma y las attestations de la imagen desde GHCR a ACR. `az acr import` copia solo el manifest de la imagen, no los artefactos de firma que cuelgan de ella, así que sin este paso Kyverno no podría verificar la firma en el cluster. Con la firma ya en ACR, la verificación corre contra el mismo registry del que AKS baja la imagen.
+3. **`az aks get-credentials --admin`**: trae el kubeconfig del cluster usando la identidad federada.
+4. **`kubectl apply -k k8s/overlays/aks-live`**: aplica el overlay de Kustomize ([k8s/overlays/aks-live](https://github.com/gcamargot/devsu-challenge/tree/master/k8s/overlays/aks-live)), que es la topología real del trial (imagen desde ACR, PostgreSQL in-cluster, ingress con certificado Cloudflare Origin CA en el secret `devsu-origin-tls`). El render previo es mínimo: un `sed` sobre `kustomization.yaml` que reemplaza el único placeholder `__ACR_LOGIN_SERVER__` y fija la imagen al `ACR/devsu-challenge:sha-<commit>`. Cierra esperando el rollout con `kubectl rollout status`, así un deploy que no estabiliza se marca como fallido en vez de quedar verde por error.
+
+El overlay `aks` ([k8s/overlays/aks](https://github.com/gcamargot/devsu-challenge/tree/master/k8s/overlays/aks)) queda como la variante productiva (PostgreSQL administrado, secret de la base vía Key Vault CSI, TLS por Let's Encrypt con cert-manager) y es el que arrastra el juego completo de placeholders `__UPPER__` (FQDN de postgres, dominio, datos de Key Vault, email de ACME, etc.); se aplicaría el día que el dominio corra en Azure DNS en vez de Cloudflare.
 
 El tag de imagen sale por sha del commit (o branch o semver, según el trigger), que es lo que hace que un deploy apunte siempre a una versión exacta y reproducible. Los valores de `vars.*` que usa el workflow (client id, tenant, subscription, nombres de RG/ACR/AKS) se cargan una sola vez desde `terraform output` después de levantar la infra.
+
+> <font color="#1a7f37">**Verificado:**</font> el CD corre verde de punta a punta: login OIDC, `az acr import`, `cosign copy`, `az aks get-credentials --admin`, `kubectl apply -k k8s/overlays/aks-live` y el `rollout status` esperando que `deploy/devsu-demo` estabilice. Hay runs reales en Actions, no es solo un diseño en papel.
 
 ## Diagrama: flujo a producción
 
@@ -89,5 +94,15 @@ El detalle de cómo el tráfico entra a este cluster desde afuera (Cloudflare, D
 > - Link al run verde del workflow CD en GitHub Actions, mostrando los pasos de login OIDC, `az acr import` y `kubectl apply`.
 >
 > ```text
-> (pegar acá la salida / captura)
+> ![terraform output](evidencia-10-terraform.png)
+>
+> ![CD deploy a AKS (verde)](evidencia-06-cd.png)
+>
+> ![recursos en el namespace devsu](evidencia-07-kubernetes.png)
+>
+> ![imagen servida desde ACR](evidencia-08-imagen-acr.png)
+>
+> ![variables del CD](evidencia-11-variables.png)
+>
+> ![federated credentials OIDC](evidencia-12-oidc.png)
 > ```
