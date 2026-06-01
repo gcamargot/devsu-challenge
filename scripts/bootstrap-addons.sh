@@ -37,7 +37,12 @@ kubectl annotate serviceaccount cert-manager -n cert-manager \
   "azure.workload.identity/client-id=${CERTMANAGER_CLIENT_ID}" --overwrite
 
 helm upgrade --install metrics-server metrics-server/metrics-server -n kube-system
-helm upgrade --install kyverno kyverno/kyverno -n kyverno --create-namespace --wait
+# config.imagePullSecrets wires the out-of-band `acr-pull` Secret (see
+# k8s/policies/acr-pull-secret.md) as --imagePullSecrets on the controllers, so the
+# image-verification path can pull signatures from the private ACR (the kubelet
+# AcrPull identity is NOT used by that path). The Secret must exist in ns kyverno.
+helm upgrade --install kyverno kyverno/kyverno -n kyverno --create-namespace --wait \
+  --set "config.imagePullSecrets={acr-pull}"
 
 kubectl apply -k k8s/policies
 

@@ -35,19 +35,20 @@ spec:
         - imageReferences:
             - "ghcr.io/gcamargot/devsu-challenge*"
             - "devsuacrgl5fdy.azurecr.io/devsu-challenge*"
-          # The ACR is private (admin disabled) and the kubelet's AcrPull identity is
-          # NOT used by Kyverno's verification path — it pulls the signature/manifest
-          # itself, so without creds it fails with `UNAUTHORIZED: authentication
-          # required`. This secret gives the verify path its own ACR pull token.
-          # The Secret lives ONLY in the cluster (namespace `kyverno`), created
-          # out-of-band like the origin-tls one (see acr-pull-secret.md) — never in git.
-          imagePullSecrets:
-            - acr-pull
+          # ACR is private (admin disabled) and Kyverno's verify path does NOT use the
+          # kubelet AcrPull identity, so it needs its own pull creds or it fails with
+          # `UNAUTHORIZED`. In this Kyverno version those creds are GLOBAL (a controller
+          # flag --imagePullSecrets=acr-pull, the `acr-pull` Secret in the kyverno ns),
+          # NOT a per-rule field. See acr-pull-secret.md for the secret + wiring.
           # mutateDigest must stay false while the action is Audit (Kyverno rejects
           # mutation on audit-only rules); set it to true together with the Enforce flip
           # so verified images get pinned to their resolved digest.
           mutateDigest: false
-          verifyDigest: true
+          # verifyDigest false while in Audit: images deploy by tag and we can't mutate
+          # to a digest in audit-only mode, so requiring a digest would fail ("missing
+          # digest") even on a correctly-signed image. Flip to true together with
+          # mutateDigest:true at the Enforce cutover so images get pinned to a digest.
+          verifyDigest: false
           required: true
           attestors:
             - count: 1
