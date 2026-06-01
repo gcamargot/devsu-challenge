@@ -5,7 +5,7 @@ import { bootstrapKubeconfig } from "./bootstrap.js";
 import { renderEnv, envNamespace, host as buildHost } from "./manifests.js";
 
 bootstrapKubeconfig();
-import { applyManifests, deleteNamespace, listEnvs, envStatus, countManagedEnvs } from "./kube.js";
+import { applyManifests, deleteNamespace, listEnvs, envStatus, countManagedEnvs, namespaceExists, ingressOwningHost } from "./kube.js";
 import { expiresAtFrom } from "./ttl.js";
 import { basicAuth } from "./auth.js";
 import { audit, recentAudit } from "./audit.js";
@@ -27,6 +27,15 @@ app.use(basicAuth);
 app.use(express.static(join(__dirname, "..", "public")));
 
 const isSlug = (s) => /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(s);
+
+// Subdomains that map to protected/production hosts. The provisioner refuses these
+// outright so the (legacy) default can never clobber prod at devsu-prod.gcamargo.xyz.
+const RESERVED_SUBDOMAINS = new Set(
+  (process.env.RESERVED_SUBDOMAINS || "devsu-prod,prod,www,api")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -118,6 +127,34 @@ app.post("/api/environments", async (req, res) => {
     const expiresAt = expiresAtFrom(duration); // validates duration too
     const namespace = envNamespace(group, subdomain);
     const host = buildHost(subdomain);
+
+    // Pre-flight collision checks. All run BEFORE any apply/create so a conflict
+    // leaves zero orphaned resources. Each yields a 409 with a clear reason.
+
+    // 1. Reserved subdomain (protects prod even when the default is used).
+    if (RESERVED_SUBDOMAINS.has(subdomain)) {
+      const msg = `subdomain "${subdomain}" is reserved and cannot be provisioned (it maps to a protected host like ${host})`;
+      await audit({ user, group, app: appName, release, subdomain, namespace, action: "create", result: "error", message: msg });
+      res.status(409).send(`<div class="err">${esc(msg)}</div>` + (await envsTable().catch(() => "")));
+      return;
+    }
+
+    // 2. Namespace already taken.
+    if (await namespaceExists(namespace)) {
+      const msg = `namespace ${namespace} already exists`;
+      await audit({ user, group, app: appName, release, subdomain, namespace, action: "create", result: "error", message: msg });
+      res.status(409).send(`<div class="err">${esc(msg)}</div>` + (await envsTable().catch(() => "")));
+      return;
+    }
+
+    // 3. Host already served by some ingress anywhere in the cluster.
+    const owner = await ingressOwningHost(host);
+    if (owner) {
+      const msg = `host ${host} already in use by ingress ${owner}`;
+      await audit({ user, group, app: appName, release, subdomain, namespace, action: "create", result: "error", message: msg });
+      res.status(409).send(`<div class="err">${esc(msg)}</div>` + (await envsTable().catch(() => "")));
+      return;
+    }
 
     const objects = renderEnv({
       namespace,
