@@ -32,6 +32,31 @@ export async function deleteNamespace(namespace) {
   return kubectl(["delete", "namespace", namespace, "--ignore-not-found", "--wait=false"]);
 }
 
+// True if the namespace already exists (any namespace, not just managed ones).
+export async function namespaceExists(namespace) {
+  try {
+    await kubectl(["get", "namespace", namespace, "-o", "name"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Cluster-wide scan: find the first ingress (any namespace) that already serves `host`
+// in one of its rules. Returns "namespace/name" or null. We compare spec.rules[].host so
+// a host taken by prod (e.g. devsu/devsu-demo) is caught before we apply anything.
+export async function ingressOwningHost(host) {
+  const out = await kubectl(["get", "ingresses", "--all-namespaces", "-o", "json"]);
+  const items = JSON.parse(out).items || [];
+  for (const ing of items) {
+    const rules = ing.spec?.rules || [];
+    if (rules.some((r) => r.host === host)) {
+      return `${ing.metadata.namespace}/${ing.metadata.name}`;
+    }
+  }
+  return null;
+}
+
 // List provisioner-managed namespaces with their metadata.
 export async function listEnvs() {
   const out = await kubectl([

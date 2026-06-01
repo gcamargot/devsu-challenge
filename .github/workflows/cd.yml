@@ -46,6 +46,18 @@ jobs:
             --source "ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}" \
             --image "devsu-challenge:${{ steps.tag.outputs.tag }}" --force
 
+      - uses: sigstore/cosign-installer@v3
+
+      # `az acr import` copies only the image, not the cosign signature/attestations
+      # (those live as separate OCI artifacts in GHCR). `cosign copy` brings them along
+      # so the image in ACR is signed just like in GHCR and Kyverno can verify it.
+      - name: Copy cosign signature/attestations to ACR
+        run: |
+          az acr login --name "${{ vars.ACR_NAME }}"
+          cosign copy -f \
+            "ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}" \
+            "${{ vars.ACR_LOGIN_SERVER }}/devsu-challenge:${{ steps.tag.outputs.tag }}"
+
       - uses: azure/setup-kubectl@v4
 
       - name: Get AKS credentials

@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Devsu Self-Service Provisioner</title>
   <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+  <script>
+    // htmx skips the swap on 4xx by default; the API returns error fragments (400/409)
+    // we still want rendered into the target (e.g. preflight collision 409s).
+    document.addEventListener("htmx:beforeSwap", (e) => {
+      if (e.detail.xhr.status >= 400 && e.detail.xhr.status < 500) {
+        e.detail.shouldSwap = true;
+        e.detail.isError = false;
+      }
+    });
+  </script>
   <style>
     :root { --bg:#0f1117; --card:#1a1d29; --fg:#e6e6eb; --muted:#8b8f9c; --accent:#5b8cff; --ok:#2ecc71; --err:#ff6b6b; }
     * { box-sizing: border-box; }
