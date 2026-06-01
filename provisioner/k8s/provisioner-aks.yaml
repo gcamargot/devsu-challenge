@@ -5,7 +5,7 @@
 #
 #   kubectl apply -f provisioner/k8s/reaper.yaml          # namespace + reaper + audit PV/PVC first
 #   kubectl -n provisioner-system create secret generic provisioner-auth \
-#       --from-literal=user=devsu-admin --from-literal=password='D3vsu-Ch4ll3ng3!'
+#       --from-literal=user=devsu-admin --from-literal=password='<PROVISIONER_PASSWORD>'
 #   kubectl apply -f provisioner/k8s/provisioner-aks.yaml
 #
 # Note: this fallback reuses the shared audit PVC `provisioner-audit` created by reaper.yaml.
