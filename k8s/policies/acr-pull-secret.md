@@ -1,142 +1,97 @@
 # ACR pull secret for Kyverno image verification (live, out-of-band)
 
-The `verify-images` ClusterPolicy verifies the cosign (keyless) signature of our
-own `devsu-challenge` images. The ACR `devsuacrgl5fdy.azurecr.io` is **private**
-and its **admin user is disabled** (`admin_enabled = false`, see
-`terraform/main.tf`).
+The `verify-images` ClusterPolicy verifies the keyless cosign signature of our
+`devsu-challenge` images. The ACR `devsuacrgl5fdy.azurecr.io` is **private** and
+its **admin user is disabled** (`admin_enabled = false`, see `terraform/main.tf`).
 
-The cluster nodes pull app images fine because the AKS **kubelet identity has
+The cluster nodes pull app images because the AKS **kubelet identity has
 `AcrPull`** — but Kyverno's verification path does NOT run as the kubelet
-identity. Kyverno pulls the image manifest + cosign signature artifact itself,
-and with no registry creds it fails with:
+identity. It pulls the image manifest + the cosign signature artifact itself, and
+without registry creds it fails with:
 
 ```
 failed to verify image ...: UNAUTHORIZED: authentication required
 ```
 
-So Kyverno needs **its own registry credential**. We give it a `docker-registry`
-Secret in the `kyverno` namespace and reference it from the policy rule via
-`verifyImages[].imagePullSecrets: [acr-pull]`.
+So Kyverno needs **its own registry credential**: a `docker-registry` Secret in
+the `kyverno` namespace, wired as the controllers' global image-pull secret.
 
-## What is codified vs. live-only
+## Where the credential is configured (important)
 
-- **Codified** (`verify-images.yaml`): the rule references the Secret **by name**
-  (`acr-pull`) under `verifyImages[].imagePullSecrets`. That name is the only
-  contract between the policy and this Secret.
-- **Live-only / out-of-band**: the `acr-pull` Secret itself. It holds an ACR
-  **pull token/password**, which must NEVER be committed to git. Same philosophy
-  as `k8s/overlays/aks-live/origin-ca-tls.md` — secrets that can't live safely in
-  git are recorded here with the exact create commands + rollback.
+In this Kyverno version (v1.18) the credential is **global**, set via the
+controller flag `--imagePullSecrets=<secret>` — there is **no per-rule
+`verifyImages[].imagePullSecrets` field** (the ClusterPolicy CRD rejects it with
+`strict decoding error: unknown field`). So the policy YAML only references the
+image repos; the credential lives on the Kyverno controllers.
 
-> Where do `imagePullSecrets` for verifyImages go — policy or Kyverno config?
-> **Both are valid.** Kyverno resolves verifyImages registry creds from EITHER:
-> (a) the per-rule `verifyImages[].imagePullSecrets` field (secret names, looked
-> up in the Kyverno namespace), OR (b) the global `imagePullSecrets` key in the
-> `kyverno` ConfigMap / the controller's `--imagePullSecrets` flag.
-> We use **(a)** because it is explicit and self-documenting in the policy, scopes
-> the credential to this one rule, and survives Helm upgrades of Kyverno (which
-> can rewrite the ConfigMap). Either way the **Secret must live in the `kyverno`
-> namespace**. The global ConfigMap fallback is documented at the bottom.
+- **Codified**: `scripts/bootstrap-addons.sh` installs Kyverno with
+  `--set "config.imagePullSecrets={acr-pull}"`, which renders the
+  `--imagePullSecrets=acr-pull` flag on the controllers.
+- **Live-only / out-of-band**: the `acr-pull` Secret itself (holds an ACR pull
+  token). Never committed to git — same philosophy as
+  `k8s/overlays/aks-live/origin-ca-tls.md`.
 
----
+The secret name (`acr-pull`) is the only contract between the flag and the Secret.
 
-## Live commands — RUN THESE YOURSELF (not run by Claude, no cluster access here)
+## Create the secret (live)
 
-Secret name (must match the policy): **`acr-pull`**
-ACR: **`devsuacrgl5fdy`** (`devsuacrgl5fdy.azurecr.io`)
-Repo scope: **`devsu-challenge`** (covers `devsu-challenge*`)
-
-### 1. Create a pull-scoped ACR token (admin is disabled, so use a scope map)
+ACR admin is disabled, so mint a repository-scoped pull token:
 
 ```bash
 ACR=devsuacrgl5fdy
-REPO=devsu-challenge          # the repo the policy verifies (devsu-challenge*)
 TOKEN_NAME=kyverno-verify-pull
 
-# Token with a content/read (pull) scope on the devsu-challenge repo only.
-# `az acr token create` auto-creates the scope-map with the given repo+action.
-az acr token create \
-  --registry "$ACR" \
-  --name "$TOKEN_NAME" \
-  --scope-map-actions content/read \
-  --repository "$REPO" content/read \
-  --status enabled
+# Pull-only token scoped to the devsu-challenge repo (covers the image and its
+# cosign .sig artifact, which lives under the same repo).
+az acr token create -n "$TOKEN_NAME" -r "$ACR" \
+  --repository devsu-challenge content/read --status enabled
 
-# Generate a password for the token (password1). Capture the value — it is shown
-# ONCE. Optional --expiry-in-days for rotation.
-TOKEN_PASSWORD=$(az acr token credential generate \
-  --registry "$ACR" \
-  --name "$TOKEN_NAME" \
-  --password1 \
-  --query 'passwords[0].value' -o tsv)
-```
+TOKEN_PASSWORD=$(az acr token credential generate -n "$TOKEN_NAME" -r "$ACR" \
+  --password1 --query 'passwords[0].value' -o tsv)
 
-Notes:
-- If your `az acr token create` rejects the inline `--repository ... content/read`
-  on your CLI version, create the scope-map first, then the token:
-  ```bash
-  az acr scope-map create --registry "$ACR" --name kyverno-verify-pull-sm \
-    --repository "$REPO" content/read
-  az acr token create --registry "$ACR" --name "$TOKEN_NAME" \
-    --scope-map kyverno-verify-pull-sm --status enabled
-  ```
-- The token **username** is the token name (`kyverno-verify-pull`); the
-  **password** is `$TOKEN_PASSWORD`.
-
-### 2. Create the docker-registry Secret in the `kyverno` namespace
-
-```bash
-export KUBECONFIG=/tmp/aks-devsu.kubeconfig   # or: az aks get-credentials -g devsu-rg -n devsu-aks --admin
-
+# docker-registry Secret in the kyverno namespace (username = token name).
 kubectl -n kyverno create secret docker-registry acr-pull \
-  --docker-server=devsuacrgl5fdy.azurecr.io \
-  --docker-username=kyverno-verify-pull \
+  --docker-server="${ACR}.azurecr.io" \
+  --docker-username="$TOKEN_NAME" \
   --docker-password="$TOKEN_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-### 3. Re-apply the policy and confirm verification authenticates
+## Wire it onto the controllers (live)
+
+Fresh installs get it from `bootstrap-addons.sh`. On a cluster already running
+Kyverno, patch the two controllers that verify images and roll them:
 
 ```bash
-kubectl apply -k k8s/policies
-
-# Trigger an admission on a devsu-challenge pod (e.g. rollout restart) and check
-# the policy reports no longer say UNAUTHORIZED. In Audit mode look at:
-kubectl get policyreport -A | grep verify-images
-kubectl -n kyverno logs deploy/kyverno-admission-controller | grep -i verifyimages
-# A wrong/missing signature should now be the failure reason, NOT
-# "authentication required".
+for d in kyverno-admission-controller kyverno-reports-controller; do
+  kubectl -n kyverno patch deploy "$d" --type=json \
+    -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--imagePullSecrets=acr-pull"}]'
+done
+kubectl -n kyverno rollout status deploy/kyverno-admission-controller
 ```
 
-## Rotation
+(The `add ...args/-` patch appends, so run it only once per controller.)
+
+## Verify
 
 ```bash
-TOKEN_PASSWORD=$(az acr token credential generate \
-  --registry devsuacrgl5fdy --name kyverno-verify-pull --password1 \
-  --query 'passwords[0].value' -o tsv)
-kubectl -n kyverno create secret docker-registry acr-pull \
-  --docker-server=devsuacrgl5fdy.azurecr.io \
-  --docker-username=kyverno-verify-pull --docker-password="$TOKEN_PASSWORD" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n devsu rollout restart deploy/devsu-demo
+kubectl -n devsu get policyreport -o wide   # verify-images rules -> pass / "image verified"
 ```
+
+Kyverno logs should show `image attestors verification succeeded ... verifiedCount=1`
+and no `UNAUTHORIZED`.
+
+> Note: `verify-images.yaml` keeps `verifyDigest: false` while in **Audit** because
+> images deploy by tag and Kyverno can't mutate to a digest in audit-only mode;
+> requiring a digest would fail ("missing digest") even on a correctly-signed
+> image. Flip `verifyDigest: true` together with `mutateDigest: true` at the
+> Enforce cutover so images get pinned to their verified digest.
 
 ## Rollback
 
 ```bash
+az acr token delete -n kyverno-verify-pull -r devsuacrgl5fdy
 kubectl -n kyverno delete secret acr-pull
-az acr token delete --registry devsuacrgl5fdy --name kyverno-verify-pull
-# and remove the imagePullSecrets block from verify-images.yaml if reverting.
+# remove the --imagePullSecrets=acr-pull arg from both controllers (kubectl edit)
 ```
-
-## Alternative: global Kyverno config (NOT used here)
-
-If you preferred the global form instead of the per-rule field, the same Secret
-in the `kyverno` namespace is referenced from the `kyverno` ConfigMap:
-
-```bash
-kubectl -n kyverno patch configmap kyverno --type merge \
-  -p '{"data":{"imagePullSecrets":"acr-pull"}}'
-kubectl -n kyverno rollout restart deploy/kyverno-admission-controller
-```
-
-We chose the per-rule field in `verify-images.yaml` instead — see the note above.
