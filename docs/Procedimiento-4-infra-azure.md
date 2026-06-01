@@ -84,25 +84,26 @@ El detalle de cómo el tráfico entra a este cluster desde afuera (Cloudflare, D
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia de esta etapa (reemplazar por salida real o captura):
->
-> - `terraform output` (debería listar `resource_group = devsu-rg`, `acr_login_server`, `aks_name = devsu-aks`, `key_vault_name = devsukvgl5fdy`, `ingress_public_ip = 20.98.237.230`, `github_actions_client_id`, y `postgres_fqdn` vacío porque `enable_managed_pg` está en false).
-> - `kubectl get nodes -o wide` (deberían verse 2 nodos `Standard_D2s_v3` en estado Ready).
-> - `kubectl get all -n devsu` (deployment de la app con 2 réplicas, el Service ClusterIP, el HPA, y el pod de postgres in-cluster).
-> - Salida de Kyverno rechazando un pod sin securityContext, por ejemplo:
->   `kubectl run pwn --image=nginx -n devsu` debería ser denegado en el admission con el mensaje "Pods must run non-root with no privilege escalation, read-only rootfs and all caps dropped."
-> - Link al run verde del workflow CD en GitHub Actions, mostrando los pasos de login OIDC, `az acr import` y `kubectl apply`.
->
-> ```text
-> ![terraform output](evidencia-10-terraform.png)
->
-> ![CD deploy a AKS (verde)](evidencia-06-cd.png)
->
-> ![recursos en el namespace devsu](evidencia-07-kubernetes.png)
->
-> ![imagen servida desde ACR](evidencia-08-imagen-acr.png)
->
-> ![variables del CD](evidencia-11-variables.png)
->
-> ![federated credentials OIDC](evidencia-12-oidc.png)
-> ```
+![terraform output con los recursos creados por la IaC](evidencia-10-terraform.png)
+
+La salida de `terraform output` lista los recursos que levanta la IaC (ACR, AKS, Key Vault, IP pública del ingress, client id de GitHub Actions). Significa que toda la infra se describe en Terraform y expone sus identificadores como outputs, que después alimentan la config del CD. Se reproduce con `terraform output` desde la carpeta `terraform/`.
+
+![CD verde: deploy a AKS de punta a punta](evidencia-06-cd.png)
+
+El run del CD a AKS sale verde en todos sus pasos (login OIDC, `az acr import`, `cosign copy`, `az aks get-credentials` y `kubectl apply -k aks-live` con `rollout status`). Significa que el despliegue a Kubernetes está integrado en el pipeline y corre de verdad, no es solo un diseño en papel. Se reproduce con `gh run view <run-id> --repo gcamargot/devsu-challenge`.
+
+![recursos productivos en el namespace devsu](evidencia-07-kubernetes.png)
+
+`kubectl get` en el namespace `devsu` muestra el Deployment `devsu-demo` en 2/2, el postgres in-cluster, el Service, el Ingress (`devsu-prod.gcamargo.xyz`), el HPA (min 2, max 5) y los secrets. Significa que la app corre en su forma productiva: dos réplicas detrás del HPA, con su ConfigMap, Secret e Ingress. Se reproduce con `kubectl get all,ingress,hpa,secret -n devsu`.
+
+![la imagen del Deployment apunta al ACR](evidencia-08-imagen-acr.png)
+
+La imagen del Deployment es `devsuacrgl5fdy.azurecr.io/devsu-challenge:sha-<commit>`. Significa que AKS baja la imagen del ACR (vía el rol AcrPull de la kubelet identity, sin imagePullSecrets) y es exactamente la imagen firmada que verificó cosign, no una recompilada. Se reproduce con `kubectl get deploy devsu-demo -n devsu -o jsonpath='{.spec.template.spec.containers[0].image}'`.
+
+![gh variable list: la config del CD vive como Variables del environment](evidencia-11-variables.png)
+
+`gh variable list` muestra las variables que consume el CD (ids no sensibles y nombres de recursos). Significa que esa config vive como Variables del environment `production`, no como secretos (no abren nada por sí solas), y se cargaron desde `terraform output`. Se reproduce con `gh variable list --env production --repo gcamargot/devsu-challenge`.
+
+![federated credentials OIDC de la app registration](evidencia-12-oidc.png)
+
+El listado de federated credentials muestra dos entradas: `github-master` (subject `...:ref:refs/heads/master`) y `github-env-production` (subject `...:environment:production`). Significa que la confianza OIDC de GitHub hacia Azure es sin client secret; como el job de CD declara `environment: production`, el token que presenta matchea la credencial de environment. Se reproduce con `az ad app federated-credential list --id <app-id>`.

@@ -77,12 +77,6 @@ Procedimiento por etapas (el camino que recorrimos):
 
 ## Evidencia
 
-> Espacio para confirmar que el servicio responde como se describe (reemplazar por salida real o captura):
->
-> - `curl -s https://devsu-prod.gcamargo.xyz/api/users` (lista de usuarios por HTTPS a traves de Cloudflare).
-> - `curl -sI https://devsu-prod.gcamargo.xyz/health` (deberia traer el header `cf-ray` de Cloudflare).
-> - `kubectl get pods,svc,ingress -n devsu`
->
-> ```text
-> ![el servicio responde por HTTPS](evidencia-09-endpoint-origen.png)
-> ```
+![El endpoint publico responde por HTTPS a traves de Cloudflare: 200 con el header cf-ray](evidencia-09-endpoint-origen.png)
+
+El endpoint publico responde por HTTPS con 200 y trae el header `cf-ray`, que lo agrega Cloudflare al pasar por el borde. Significa que el servicio esta vivo y accesible en https://devsu-prod.gcamargo.xyz. Se reproduce con `curl -sI https://devsu-prod.gcamargo.xyz/health`.

@@ -104,12 +104,8 @@ flowchart TB
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia de esta etapa (reemplazar por salida real o captura):
->
-> - Link al run verde de GitHub Actions del workflow CI (los tres jobs `build-test`, `sonar` y `docker` en verde).
-> - Captura del quality gate de SonarCloud en estado "Passed", mostrando la rama analizada como `master` (no `main`) y la cobertura reportada.
-> - Salida del paso de Trivy en el run de Actions: `trivy image --severity HIGH,CRITICAL --ignore-unfixed` con 0 vulnerabilidades, confirmando que el gate pasa.
->
-> ```text
-> ![CI: build, test, coverage, SonarQube, build+scan+push](evidencia-04-ci.png)
-> ```
+Esta es la corrida real del pipeline de CI vista desde la consola.
+
+![CI verde: build+test+coverage, SonarQube y build+scan+push](evidencia-04-ci.png)
+
+El `gh run view` muestra los tres jobs en verde: `build-test` (build, lint, tests y coverage), `sonar` (análisis estático contra SonarCloud) y `docker` (build, scan de Trivy, push a GHCR y firma cosign). Que los tres cierren verdes significa que el pipeline corre de punta a punta sin fallar en ningún gate: ni el lint, ni los tests, ni el quality gate, ni el scan de vulnerabilidades frenan la corrida, y la imagen sale publicada y firmada. Se reproduce con `gh run view <run-id>` sobre el run del workflow CI.

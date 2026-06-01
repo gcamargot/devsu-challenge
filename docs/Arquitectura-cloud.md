@@ -64,14 +64,14 @@ Una decision de arquitectura que conviene anotar acá es que la observabilidad n
 
 ## Evidencia
 
-> Espacio para pegar evidencia de que la arquitectura responde como se describe (reemplazar por salida real o captura):
->
-> - `curl -sI https://devsu-prod.gcamargo.xyz/health` (debería responder por HTTPS a través de Cloudflare, con el header `cf-ray` presente).
-> - `kubectl get pods,svc,ingress -n devsu`
-> - `kubectl get networkpolicy -n devsu`
->
-> ![mapa de recursos de la infra (Azure resource viewer)](azure-arch.png)
->
-> ![el endpoint responde por HTTPS via Cloudflare (cf-ray presente)](evidencia-09-endpoint-origen.png)
->
-> ![pods, servicios e ingress en el namespace devsu](evidencia-07-kubernetes.png)
+![Resource viewer de Azure con el mapa de recursos del resource group: AKS, ACR, Key Vault, Grafana y demas](azure-arch.png)
+
+El resource viewer de Azure muestra el mapa de recursos del resource group (AKS, ACR, Key Vault, Grafana y el resto). Significa que la infra descrita esta realmente desplegada, tal como la creo la IaC. Se reproduce desde el portal de Azure (Resource group -> Resource visualizer) o con `az resource list -g devsu-rg -o table`.
+
+![El endpoint responde via Cloudflare con 200 y cf-ray, y el origen directo da 403](evidencia-09-endpoint-origen.png)
+
+Por el dominio la respuesta es 200 con el header `cf-ray` de Cloudflare, y pegandole directo al origen la respuesta es 403. Significa que el camino de trafico que describe la arquitectura (cliente -> Cloudflare -> ingress) funciona como se plantea y el origen no es alcanzable salteando el borde. Se reproduce con `curl -sI https://devsu-prod.gcamargo.xyz/health` contra `curl -skI https://20.98.237.230/health --max-time 10`.
+
+![Pods, servicios e ingress corriendo en el namespace devsu](evidencia-07-kubernetes.png)
+
+Los pods, servicios e ingress aparecen corriendo en el namespace devsu. Significa que la capa de Kubernetes de la arquitectura esta levantada y sirviendo la app. Se reproduce con `kubectl get pods,svc,ingress -n devsu`.

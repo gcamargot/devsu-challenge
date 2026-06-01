@@ -259,14 +259,6 @@ Hay un puñado de cosas que dejamos documentadas como el salto natural a un ento
 
 ## Evidencia
 
-> Espacio para pegar la evidencia de que el clúster y la infra responden como se describe (reemplazar por salida real o captura):
->
-> - `kubectl get nodes -o wide` (esperamos 2x Standard_D2s_v3 en estado Ready)
-> - `kubectl get pods -n devsu -o wide` (réplicas repartidas entre nodos)
-> - `kubectl get hpa -n devsu`
-> - `terraform output` (corrido en `terraform/`)
-> - `az aks show -g devsu-rg -n devsu-aks -o table`
->
-> ```text
-> ![estado del cluster y la app](evidencia-07-kubernetes.png)
-> ```
+![Estado operativo del cluster y la app en devsu: deployment devsu-demo 2/2, postgres, service, ingress, HPA y secrets](evidencia-07-kubernetes.png)
+
+La salida de `kubectl get` sobre el namespace devsu muestra el deployment `devsu-demo` con 2/2 réplicas listas, el postgres in-cluster, el service, el ingress, el HPA y los secrets. Significa que el estado operativo es el esperado: las dos réplicas estan ready y el HPA esta activo vigilando CPU y memoria. Se reproduce con `kubectl get all,hpa,secret -n devsu -o wide`.

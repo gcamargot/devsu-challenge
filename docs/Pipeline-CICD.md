@@ -121,16 +121,14 @@ El camino de runtime (como llega el usuario: Cloudflare al frente del ingress) n
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia de que los pipelines corren como se describe (reemplazar por links a runs reales o capturas):
->
-> - Run de CI verde en Actions (build-test + sonar + docker, con el push a GHCR): `https://github.com/gcamargot/devsu-challenge/actions/workflows/ci.yml`
-> - Run de CD verde en Actions (login OIDC, az acr import y rollout status OK): `https://github.com/gcamargot/devsu-challenge/actions/workflows/cd.yml`
-> - Imagen publicada en GHCR con el tag `sha-<commit>` y, opcionalmente, la salida de `trivy image --severity HIGH,CRITICAL --ignore-unfixed <tag>` mostrando 0 hallazgos fixables.
->
-> ```text
-> ![CI verde](evidencia-04-ci.png)
->
-> ![CD deploy a AKS verde](evidencia-06-cd.png)
->
-> ![firma cosign verificada](evidencia-05-cosign.png)
-> ```
+![CI verde: los tres jobs del workflow de integración en estado success](evidencia-04-ci.png)
+
+Los tres jobs del CI salen verdes: build-test (lint, tests y coverage), sonar (análisis estático) y docker (build, scan con Trivy y push a GHCR). Que el job de docker quede verde significa que la imagen pasó el gate de Trivy (0 hallazgos HIGH/CRITICAL fixables) y recién ahí se publicó. Se reproduce con `gh run view <run-id> --repo gcamargot/devsu-challenge`.
+
+![CD verde: deploy a AKS por OIDC de punta a punta](evidencia-06-cd.png)
+
+El CD corre verde en todos sus pasos: login a Azure por OIDC, `az acr import`, `cosign copy`, `az aks get-credentials` y el `kubectl apply -k aks-live` con su `rollout status`. Que el último paso quede verde significa que los pods nuevos quedaron listos dentro del timeout (el deploy estabilizó de verdad, no se dio por exitoso a ciegas). Se reproduce con `gh run view <run-id> --repo gcamargot/devsu-challenge`.
+
+![cosign verify de la imagen en ACR: firma válida y atada a la identidad OIDC del CI](evidencia-05-cosign.png)
+
+`cosign verify` sobre la imagen en ACR devuelve "cosign claims validated", la existencia en el log de transparencia (Rekor) y el certificado verificado. Significa que la imagen está firmada y la firma es verificable, atada a la identidad OIDC del workflow de CI (keyless: no hay clave privada que guardar ni rotar). Se reproduce con `cosign verify devsuacrgl5fdy.azurecr.io/devsu-challenge:sha-<commit>`.

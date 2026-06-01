@@ -75,18 +75,16 @@ flowchart LR
 
 ## Evidencia
 
-> <font color="#0969da">**Evidencia:**</font> espacio para pegar la evidencia de esta etapa (reemplazar por salida real o captura):
->
-> - `cd app && npm test` (la suite de jest debería pasar en verde contra sqlite en memoria).
-> - `cd app && npm run test:coverage` (reporte de cobertura).
-> - `docker build -t users-api:local .` seguido de `docker run --rm -p 8000:8000 users-api:local` y, en otra terminal, `curl -s http://127.0.0.1:8000/health` (debería devolver `{"status":"ok"}`).
-> - `docker exec <container> id` (debería mostrar `uid=1000(node)`, confirmando que no corre como root).
-> - `trivy image users-api:local --severity HIGH,CRITICAL --ignore-unfixed` (debería listar 0 vulnerabilidades).
->
-> ```text
-> ![docker build multi-stage](evidencia-01-docker-build.png)
->
-> ![runtime no-root + healthcheck + /health](evidencia-02-docker-runtime.png)
->
-> ![Trivy 0 HIGH/CRITICAL fixables](evidencia-03-trivy.png)
-> ```
+Estas son las capturas reales de esta etapa: el build de la imagen, el runtime hardenizado y el scan limpio.
+
+![docker build multi-stage de la imagen](evidencia-01-docker-build.png)
+
+El build con `docker build --no-cache` recorre las dos etapas (`deps` resolviendo solo dependencias de producción y `runtime` armando la imagen final) y termina sin errores. Que arranque desde cero y igual cierre OK significa que el build es reproducible y limpio en etapas, no algo que solo funciona con cache caliente. Se reproduce con `docker build --no-cache -t users-api:local .`.
+
+![runtime no-root con puerto 8000, healthcheck y /health respondiendo](evidencia-02-docker-runtime.png)
+
+El `docker inspect` muestra `User=node`, el puerto 8000 expuesto y el `HEALTHCHECK` haciendo `wget /health`; el `docker exec ... id` devuelve `uid=1000` (no root); y el `curl` a `/health` responde `{"status":"ok"}`. Ese `uid=1000` es la señal clave: el contenedor corre como usuario sin privilegios, justo lo que después exige Kyverno en el cluster, y aun así expone el puerto, reporta su salud y atiende. Se reproduce con `docker run --rm -p 8000:8000 users-api:local` y, en otra terminal, `docker exec <container> id` y `curl -s http://127.0.0.1:8000/health`.
+
+![Trivy con 0 vulnerabilidades HIGH/CRITICAL fixables](evidencia-03-trivy.png)
+
+Trivy escanea la imagen final y reporta 0 vulnerabilidades HIGH/CRITICAL con fix disponible. Ese cero no es un parche puntual sino consecuencia directa del diseño (base alpine, solo dependencias de producción, sqlite3 fuera del runtime y npm desinstalado del artefacto), así que se sostiene rebuild tras rebuild. Se reproduce con `trivy image users-api:local --severity HIGH,CRITICAL --ignore-unfixed`.
