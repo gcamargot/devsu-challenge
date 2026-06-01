@@ -46,28 +46,25 @@ jobs:
             --source "ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}" \
             --image "devsu-challenge:${{ steps.tag.outputs.tag }}" --force
 
+      - uses: azure/setup-kubectl@v4
+
       - name: Get AKS credentials
         run: az aks get-credentials --resource-group "${{ vars.RESOURCE_GROUP }}" --name "${{ vars.AKS_NAME }}" --admin --overwrite-existing
 
-      - name: Render overlay placeholders
-        working-directory: k8s/overlays/aks
+      # The live trial cluster runs the aks-live overlay: image pulled from ACR,
+      # postgres in-cluster, Cloudflare Origin CA at the edge. The `aks` overlay is
+      # the managed-PG production variant (Key Vault CSI + Let's Encrypt), used once
+      # the domain runs on Azure DNS instead of Cloudflare. Only placeholder here is
+      # the ACR login server; the sha tag is pinned in the kustomization image block.
+      - name: Render overlay (aks-live)
+        working-directory: k8s/overlays/aks-live
         run: |
           sed -i \
             -e "s|__ACR_LOGIN_SERVER__|${{ vars.ACR_LOGIN_SERVER }}|g" \
-            -e "s|__POSTGRES_FQDN__|${{ vars.POSTGRES_FQDN }}|g" \
-            -e "s|__ORIGIN_HOST__|${{ vars.ORIGIN_HOST }}|g" \
-            -e "s|__DOMAIN__|${{ vars.DOMAIN }}|g" \
-            -e "s|__RESOURCE_GROUP__|${{ vars.RESOURCE_GROUP }}|g" \
-            -e "s|__SUBSCRIPTION_ID__|${{ vars.AZURE_SUBSCRIPTION_ID }}|g" \
-            -e "s|__TENANT_ID__|${{ vars.AZURE_TENANT_ID }}|g" \
-            -e "s|__KV_NAME__|${{ vars.KV_NAME }}|g" \
-            -e "s|__KV_CLIENT_ID__|${{ vars.KV_CLIENT_ID }}|g" \
-            -e "s|__CERTMANAGER_CLIENT_ID__|${{ vars.CERTMANAGER_CLIENT_ID }}|g" \
-            -e "s|__ACME_EMAIL__|${{ vars.ACME_EMAIL }}|g" \
-            *.yaml
-          kustomize edit set image "ghcr.io/gcamargot/devsu-challenge=${{ vars.ACR_LOGIN_SERVER }}/devsu-challenge:${{ steps.tag.outputs.tag }}"
+            -e "s|newTag: latest|newTag: ${{ steps.tag.outputs.tag }}|g" \
+            kustomization.yaml
 
       - name: Apply
         run: |
-          kubectl apply -k k8s/overlays/aks
+          kubectl apply -k k8s/overlays/aks-live
           kubectl -n devsu rollout status deploy/devsu-demo --timeout=180s
